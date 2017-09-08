@@ -20,11 +20,6 @@ class Reader implements \IteratorAggregate
         return $instance;
     }
 
-    public function __destruct()
-    {
-        @fclose($this->stream);
-    }
-
     public function getIterator()
     {
         if (isset($this->iterator)) {

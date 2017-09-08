@@ -25,7 +25,6 @@ class XLSXIterator implements \Iterator
         $relationships = simplexml_load_string($this->zip->getFromName("_rels/.rels"));
         foreach ($relationships->Relationship as $relationship) {
             if ($relationship['Type'] == 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument') {
-                $workingdir  = dirname($relationship['Target']) . '/';
                 // this should be safe to extract as string (not stream)
                 $workbook = simplexml_load_string($this->zip->getFromName($relationship['Target']));
                 foreach ($workbook->sheets->sheet as $sheet) {

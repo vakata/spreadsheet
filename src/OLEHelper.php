@@ -60,7 +60,6 @@ class OLEHelper
         }
 
         // readBigBlockDepot
-        $pos = 0;
         for ($i = 0; $i < $numBigBlockDepotBlocks; $i++) {
             $pos = ($bigBlockDepotBlocks[$i] + 1) * 0x200;
             for ($j = 0 ; $j < 0x200 / 4; $j++) {
@@ -69,7 +68,6 @@ class OLEHelper
             }
         }
 
-        $pos = 0;
         $sbdBlock = $sbdStartBlock;
         while ($sbdBlock != -2) {
             $pos = ($sbdBlock + 1) * 0x200;
@@ -116,7 +114,6 @@ class OLEHelper
         if ($book['size'] < 0x1000){
             $rootdata = $this->readData($root['strt']);
             $block = $book['strt'];
-            $pos = 0;
             while ($block != -2) {
                 $pos = $block * 0x40;
                 $this->excl .= substr($rootdata, $pos, 0x40);
@@ -129,7 +126,6 @@ class OLEHelper
             }
             if ($numBlocks > 0) {
                 $block = $book['strt'];
-                $pos = 0;
                 while ($block != -2) {
                     $pos = ($block + 1) * 0x200;
                     $this->excl .= substr($this->data, $pos, 0x200);
@@ -141,7 +137,6 @@ class OLEHelper
 
     protected function readData($block)
     {
-        $pos = 0;
         $data = '';
         while ($block != -2)  {
             $pos   = ($block + 1) * 0x200;

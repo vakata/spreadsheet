@@ -71,7 +71,6 @@ class XLSHelper
         $pos = 0;
         $data = $this->data;
 
-        $code = $this->v($data,$pos);
         $length = $this->v($data,$pos+2);
         $version = $this->v($data,$pos+4);
         $substreamType = $this->v($data,$pos+6);
@@ -173,7 +172,7 @@ class XLSHelper
                                     }
                                     $charsLeft -= $len;
                                     $asciiEncoding = false;
-                                } else{
+                                } else {
                                     $newstr = '';
                                     for ($j = 0; $j < strlen($retstr); $j++) {
                                         $newstr = $retstr[$j].chr(0);
@@ -199,8 +198,7 @@ class XLSHelper
                     }
                     break;
                 case self::READER_TYPE_FILEPASS:
-                    return false;
-                    break;
+                    throw new \Exception('Workbook incomplete');
                 case self::READER_TYPE_NAME:
                     break;
                 case self::READER_TYPE_FORMAT:
@@ -318,8 +316,6 @@ class XLSHelper
                     break;
                 case self::READER_TYPE_BOUNDSHEET:
                     $rec_offset = $this->getInt4d($data, $pos+4);
-                    $rec_typeFlag = ord($data[$pos+8]);
-                    $rec_visibilityFlag = ord($data[$pos+9]);
                     $rec_length = ord($data[$pos+10]);
 
                     $rec_name = '';
@@ -405,13 +401,12 @@ class XLSHelper
                     $column = ord($data[$spos+2]) | ord($data[$spos+3])<<8;
                     $rknum = $this->getInt4d($data, $spos + 6);
                     $numValue = $this->getIEEE754($rknum);
-                    $info = $this->getCellDetails($spos,$numValue,$column);
+                    $info = $this->getCellDetails($spos,$numValue);
                     $this->addCell($row, $column, $info['string']);
                     break;
                 case self::READER_TYPE_LABELSST:
                     $row     = ord($data[$spos]) | ord($data[$spos+1])<<8;
                     $column  = ord($data[$spos+2]) | ord($data[$spos+3])<<8;
-                    $xfindex = ord($data[$spos+4]) | ord($data[$spos+5])<<8;
                     $index   = $this->getInt4d($data, $spos + 6);
                     $this->addCell($row, $column, $this->sst[$index]);
                     break;
@@ -423,7 +418,7 @@ class XLSHelper
                     $tmppos   = $spos+4;
                     for ($i = 0; $i < $columns; $i++) {
                         $numValue = $this->getIEEE754($this->getInt4d($data, $tmppos + 2));
-                        $info = $this->getCellDetails($tmppos-4,$numValue,$colFirst + $i + 1);
+                        $info = $this->getCellDetails($tmppos-4,$numValue);
                         $tmppos += 6;
                         $this->addCell($row, $colFirst + $i, $info['string']);
                     }
@@ -438,7 +433,7 @@ class XLSHelper
                     else {
                         $numValue = $this->createNumber($spos);
                     }
-                    $info = $this->getCellDetails($spos,$numValue,$column);
+                    $info = $this->getCellDetails($spos,$numValue);
                     $this->addCell($row, $column, $info['string']);
                     break;
                 case self::READER_TYPE_FORMULA:
@@ -473,7 +468,7 @@ class XLSHelper
                               else {
                                 $numValue = $this->createNumber($spos);
                               }
-                        $info = $this->getCellDetails($spos,$numValue,$column);
+                        $info = $this->getCellDetails($spos,$numValue);
                         $this->addCell($row, $column, $info['string']);
                     }
                     break;
@@ -529,7 +524,6 @@ class XLSHelper
                     $column = ord($data[$spos+2]) | ord($data[$spos+3])<<8;
                     $cols = ($length / 2) - 3;
                     for ($c = 0; $c < $cols; $c++) {
-                        $xfindex = ord($data[$spos + 4 + ($c * 2)]) | ord($data[$spos + 5 + ($c * 2)])<<8;
                         $this->addCell($row, $column + $c, "");
                     }
                     break;
@@ -582,7 +576,7 @@ class XLSHelper
             $spos += $length;
         }
     }
-    protected function getCellDetails($spos, $numValue, $column)
+    protected function getCellDetails($spos, $numValue)
     {
         $xfindex = ord($this->data[$spos+4]) | ord($this->data[$spos+5]) << 8;
         $xfrecord = $this->xfRecords[$xfindex];
@@ -590,8 +584,6 @@ class XLSHelper
 
         $format = $xfrecord['format'];
         $formatIndex = $xfrecord['formatIndex'];
-        $fontIndex = $xfrecord['fontIndex'];
-        $formatColor = "";
         $rectype = '';
         $string = '';
         $raw = '';
@@ -602,8 +594,6 @@ class XLSHelper
             // Convert numeric value into a date
             $utcDays = floor($numValue - ($this->nineteenFour ? self::READER_UTCOFFSETDAYS1904 : self::READER_UTCOFFSETDAYS));
             $utcValue = ($utcDays) * self::READER_MSINADAY;
-            $dateinfo =     
-            $temp = array();
             $dateinfo = array_combine(
                 ['seconds','minutes','hours','mday','wday','mon','year','yday','weekday','month',0],
                 explode(":", gmdate('s:i:G:j:w:n:Y:z:l:F:U', $utcValue ?? time()))

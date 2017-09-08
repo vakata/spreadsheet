@@ -6,9 +6,9 @@ class XLSIterator implements \Iterator
 {
     protected $sheet = [];
 
-    public function __construct(string $file, $sheet = null)
+    public function __construct(string $file, $desiredSheet = null)
     {
-        $this->sheet = (new XLSHelper($file))->getSheet();
+        $this->sheet = (new XLSHelper($file, $desiredSheet))->getSheet();
     }
 
     public function current()
