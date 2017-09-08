@@ -30,5 +30,5 @@ changetracking:
 
 filter:
     excluded_paths:
-        - "src/XLSHelper"
-        - "src/OLEHelper"
+        - "src/XLSHelper.php"
+        - "src/OLEHelper.php"
