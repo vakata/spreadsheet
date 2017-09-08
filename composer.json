@@ -1,0 +1,43 @@
+{
+    "name": "vakata/spreadsheet",
+    "description": "Simple spreadsheet reader supporting XLS, XLSX and CSV files",
+    "keywords": [
+        "vakata",
+        "spreadsheet",
+        "xls",
+        "xlsx",
+        "csv"
+    ],
+    "homepage": "https://github.com/vakata/spreadsheet",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "vakata",
+            "email": "github@vakata.com",
+            "homepage": "http://www.vakata.com",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php" : ">=7.0.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit" : "6.*",
+        "clean/phpdoc-md": "dev-master"
+    },
+    "autoload": {
+        "psr-4": {
+            "vakata\\spreadsheet\\": "src"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "vakata\\spreadsheet\\test\\": "tests"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "psr2": "php-cs-fixer fix ./src",
+        "phpdoc": "phpdoc-md"
+    }
+}

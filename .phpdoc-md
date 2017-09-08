@@ -1,0 +1,15 @@
+<?php
+return (object)[
+    'rootNamespace' => 'vakata\spreadsheet',
+    'destDirectory' => 'docs',
+    'format' => 'github',
+    'classes' => [
+        '\\vakata\\spreadsheet\\Reader',
+        '\\vakata\\spreadsheet\\Exception',
+        '\\vakata\\spreadsheet\\XLSXIterator',
+        '\\vakata\\spreadsheet\\XLSIterator',
+        '\\vakata\\spreadsheet\\CSVIterator',
+        '\\vakata\\spreadsheet\\XLSHelper',
+        '\\vakata\\spreadsheet\\OLEHelper'
+    ],
+];
