@@ -95,7 +95,7 @@ class XLSXIterator implements \Iterator
         $beg = $this->read('<dimension');
         if (isset($beg)) {
             $end = $this->read('>');
-            $this->dim = $this->getCellIndex(explode(':', explode('"', $beg . $end)[1])[1]);
+            $this->dim = $this->getCellIndex(explode(':', explode('"', $end)[1])[1]);
         }
     }
     protected function getCellIndex($cell)
