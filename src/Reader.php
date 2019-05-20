@@ -27,6 +27,11 @@ class Reader implements \IteratorAggregate
         }
         switch ($this->format) {
             case 'csv':
+            case 'tsv':
+            case 'dsv':
+            case 'ssv':
+            case 'psv':
+            case 'txt':
                 $iterator = new CSVIterator($this->file, $this->options);
                 break;
             case 'xls':
@@ -39,5 +44,9 @@ class Reader implements \IteratorAggregate
                 throw new \Exception('Unsupported format');
         }
         return $this->iterator = $iterator;
+    }
+    public function toArray()
+    {
+        return iterator_to_array($this);
     }
 }

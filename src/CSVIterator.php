@@ -16,6 +16,30 @@ class CSVIterator implements \Iterator
         if ($this->stream === false) {
             throw new Exception('Document not readable');
         }
+        if (!$this->options['delimiter']) {
+            $delimiters = [];
+            foreach ([',',';',"\t",'|'] as $delimiter) {
+                $delimiters[$delimiter] = [
+                    fgetcsv($this->stream, 0, $delimiter),
+                    fgetcsv($this->stream, 0, $delimiter)
+                ];
+                fseek($this->stream, 0);
+            }
+            foreach ($delimiters as $delimiter => $rows) {
+                if (count($rows[1]) !== 0 && count($rows[0]) !== count($rows[1])) {
+                    unset($delimiters[$delimiter]);
+                    break;
+                }
+                if (!count($rows[0])) {
+                    unset($delimiters[$delimiter]);
+                    break;
+                }
+                $delimiters[$delimiter] = count($rows[0]);
+            }
+            if (count($delimiters)) {
+                $this->options['delimiter'] = array_search(max($delimiters), $delimiters);
+            }
+        }
     }
     public function __destruct()
     {
