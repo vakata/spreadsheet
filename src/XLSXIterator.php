@@ -108,7 +108,7 @@ class XLSXIterator implements \Iterator
         $len = strlen($col);
         $ind = 0;
         for ($i = $len - 1; $i >= 0; $i--) {
-            $ind += (ord($col{$i}) - 64) * pow(26, $len - $i - 1);
+            $ind += (ord($col[$i]) - 64) * pow(26, $len - $i - 1);
         }
         return $ind;
     }
