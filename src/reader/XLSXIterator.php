@@ -1,6 +1,8 @@
 <?php
 
-namespace vakata\spreadsheet;
+namespace vakata\spreadsheet\reader;
+
+use vakata\spreadsheet\Exception;
 
 class XLSXIterator implements \Iterator
 {
@@ -174,15 +176,15 @@ class XLSXIterator implements \Iterator
         }
         return null;
     }
-    public function current()
+    public function current(): mixed
     {
         return $this->row;
     }
-    public function key()
+    public function key(): mixed
     {
         return $this->ind;
     }
-    public function next()
+    public function next(): void
     {
         $temp = $this->read('<row ');
         if (!isset($temp)) {
@@ -201,7 +203,7 @@ class XLSXIterator implements \Iterator
             $this->row[$this->getCellIndex($cell['r']) - 1] = $this->getCellValue($cell);
         }
     }
-    public function rewind()
+    public function rewind(): void
     {
         $this->stream = $this->zip->getStream($this->path);
         $this->rest = '';
@@ -209,7 +211,7 @@ class XLSXIterator implements \Iterator
         $this->ind = -1;
         $this->next();
     }
-    public function valid()
+    public function valid(): bool
     {
         return $this->row !== null;
     }

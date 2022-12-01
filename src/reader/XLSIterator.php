@@ -1,6 +1,6 @@
 <?php
 
-namespace vakata\spreadsheet;
+namespace vakata\spreadsheet\reader;
 
 class XLSIterator implements \Iterator
 {
@@ -27,15 +27,15 @@ class XLSIterator implements \Iterator
     {
         return key($this->sheet['cells']);
     }
-    public function next()
+    public function next(): void
     {
         next($this->sheet['cells']);
     }
-    public function rewind()
+    public function rewind(): void
     {
         reset($this->sheet['cells']);
     }
-    public function valid()
+    public function valid(): bool
     {
         return current($this->sheet['cells']) !== false;
     }

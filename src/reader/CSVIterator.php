@@ -1,6 +1,8 @@
 <?php
 
-namespace vakata\spreadsheet;
+namespace vakata\spreadsheet\reader;
+
+use vakata\spreadsheet\Exception;
 
 class CSVIterator implements \Iterator
 {
@@ -45,27 +47,27 @@ class CSVIterator implements \Iterator
     {
         fclose($this->stream);
     }
-    public function current()
+    public function current(): mixed
     {
         return $this->row;
     }
-    public function key()
+    public function key(): mixed
     {
         return $this->ind;
     }
-    public function next()
+    public function next(): void
     {
         $this->row = fgetcsv($this->stream, 0, $this->options['delimiter'] ?? ',', $this->options['enclosure'] ?? '"', $this->options['escape'] ?? '\\');
         $this->ind++;
     }
-    public function rewind()
+    public function rewind(): void
     {
         rewind($this->stream);
         $this->row = null;
         $this->ind = -1;
         $this->next();
     }
-    public function valid()
+    public function valid(): bool
     {
         return $this->row !== false;
     }

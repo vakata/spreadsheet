@@ -1,5 +1,7 @@
 <?php
-namespace vakata\spreadsheet;
+namespace vakata\spreadsheet\reader;
+
+use vakata\spreadsheet\Exception;
 
 class OLEHelper
 {

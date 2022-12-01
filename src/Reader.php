@@ -2,25 +2,31 @@
 
 namespace vakata\spreadsheet;
 
+use Traversable;
+use vakata\spreadsheet\reader\CSVIterator;
+use vakata\spreadsheet\reader\XLSIterator;
+use vakata\spreadsheet\reader\XLSXIterator;
+use vakata\spreadsheet\reader\XMLIterator;
+
 class Reader implements \IteratorAggregate
 {
-    protected $file;
+    protected $path;
     protected $format;
-    protected $active;
     protected $options;
     protected $iterator;
 
-    public static function fromFile(string $file, string $format = null, $active = null, array $options = [])
+    public function __construct(string $path, string $format, array $options = [])
     {
-        $instance          = new static();
-        $instance->file    = $file;
-        $instance->format  = $format ?? strtolower(substr($file, strrpos($file, '.') + 1));
-        $instance->active  = $active;
-        $instance->options = $options;
-        return $instance;
+        $this->path = $path;
+        $this->format = $format;
+        $this->options = $options;
+    }
+    public static function fromFile(string $path, array $options = [])
+    {
+        return new static($path, strtolower(substr($path, strrpos($path, '.') + 1)), $options);
     }
 
-    public function getIterator()
+    public function getIterator(): Traversable
     {
         if (isset($this->iterator)) {
             return $this->iterator;
@@ -32,13 +38,16 @@ class Reader implements \IteratorAggregate
             case 'ssv':
             case 'psv':
             case 'txt':
-                $iterator = new CSVIterator($this->file, $this->options);
+                $iterator = new CSVIterator($this->path, $this->options);
                 break;
             case 'xls':
-                $iterator = new XLSIterator($this->file, $this->active);
+                $iterator = new XLSIterator($this->path, $this->options['active'] ?? null);
                 break;
             case 'xlsx':
-                $iterator = new XLSXIterator($this->file, $this->active);
+                $iterator = new XLSXIterator($this->path, $this->options['active'] ?? null);
+                break;
+            case 'xml':
+                $iterator = new XMLIterator($this->path, $this->options);
                 break;
             default:
                 throw new \Exception('Unsupported format');
