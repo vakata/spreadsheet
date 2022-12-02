@@ -8,12 +8,13 @@ use vakata\spreadsheet\reader\XLSIterator;
 use vakata\spreadsheet\reader\XLSXIterator;
 use vakata\spreadsheet\reader\XMLIterator;
 
+/** @phpstan-consistent-constructor */
 class Reader implements \IteratorAggregate
 {
-    protected $path;
-    protected $format;
-    protected $options;
-    protected $iterator;
+    protected string $path;
+    protected string $format;
+    protected array $options;
+    protected ?Traversable $iterator = null;
 
     public function __construct(string $path, string $format, array $options = [])
     {
@@ -21,7 +22,7 @@ class Reader implements \IteratorAggregate
         $this->format = $format;
         $this->options = $options;
     }
-    public static function fromFile(string $path, array $options = [])
+    public static function fromFile(string $path, array $options = []): static
     {
         return new static($path, strtolower(substr($path, strrpos($path, '.') + 1)), $options);
     }
@@ -50,11 +51,11 @@ class Reader implements \IteratorAggregate
                 $iterator = new XMLIterator($this->path, $this->options);
                 break;
             default:
-                throw new \Exception('Unsupported format');
+                throw new Exception('Unsupported format');
         }
         return $this->iterator = $iterator;
     }
-    public function toArray()
+    public function toArray(): array
     {
         return iterator_to_array($this);
     }

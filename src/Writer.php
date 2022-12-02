@@ -5,15 +5,15 @@ namespace vakata\spreadsheet;
 use vakata\spreadsheet\writer\CSVWriter;
 use vakata\spreadsheet\writer\DriverInterface;
 use vakata\spreadsheet\writer\XLSXWriter;
-use XMLWriter;
+use vakata\spreadsheet\writer\XMLWriter;
 
+/** @phpstan-consistent-constructor */
 class Writer
 {
     protected DriverInterface $driver;
 
     public function __construct(mixed $stream, string $format, array $options = [])
     {
-        $this->stream = $stream;
         switch ($format) {
             case 'csv':
                 $this->driver = new CSVWriter($stream, $options);
@@ -28,15 +28,15 @@ class Writer
                 throw new Exception('Unsupported format');
         }
     }
-    public static function toFile(string $path, ?string $format = null, array $options = [])
+    public static function toFile(string $path, ?string $format = null, array $options = []): static
     {
         return new static(fopen($path, 'wb'), $format ?? strtolower(substr($path, strrpos($path, '.') + 1)), $options);
     }
-    public static function toStream(mixed $stream, string $format = 'xlsx', array $options = [])
+    public static function toStream(mixed $stream, string $format = 'xlsx', array $options = []): static
     {
         return new static($stream, $format, $options);
     }
-    public static function toBrowser(string $format = 'xlsx', array $options = [], ?string $filename = null)
+    public static function toBrowser(string $format = 'xlsx', array $options = [], ?string $filename = null): static
     {
         if ($filename) {
             switch ($format) {
@@ -52,10 +52,9 @@ class Writer
                 default:
                     throw new Exception('Unsupported format');
             }
-            header('Content-Disposition: attachment; '.
+            header('Content-Disposition: attachment; ' .
                 'filename="' . preg_replace('([^a-z0-9.-]+)i', '_', $filename) . '"; ' .
-                'filename*=UTF-8\'\'' . rawurlencode($filename)
-            );
+                'filename*=UTF-8\'\'' . rawurlencode($filename));
         }
         return static::toStream(fopen('php://output', 'wb'), $format, $options);
     }

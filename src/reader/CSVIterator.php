@@ -6,12 +6,12 @@ use vakata\spreadsheet\Exception;
 
 class CSVIterator implements \Iterator
 {
-    protected $stream;
-    protected $options = [];
-    protected $row;
-    protected $ind = -1;
+    protected mixed $stream;
+    protected array $options = [];
+    protected mixed $row;
+    protected int $ind = -1;
 
-    public function __construct($file, array $options = [])
+    public function __construct(string $file, array $options = [])
     {
         $this->stream = fopen($file, 'r');
         $this->options = $options;
@@ -57,7 +57,13 @@ class CSVIterator implements \Iterator
     }
     public function next(): void
     {
-        $this->row = fgetcsv($this->stream, 0, $this->options['delimiter'] ?? ',', $this->options['enclosure'] ?? '"', $this->options['escape'] ?? '\\');
+        $this->row = fgetcsv(
+            $this->stream,
+            0,
+            $this->options['delimiter'] ?? ',',
+            $this->options['enclosure'] ?? '"',
+            $this->options['escape'] ?? '\\'
+        );
         $this->ind++;
     }
     public function rewind(): void

@@ -29,7 +29,7 @@
         }
     },
     "scripts": {
-        "phpstan": "phpstan analyze -l 7 src",
+        "phpstan": "phpstan analyze -l 8 -c .phpstan.neon src",
         "phpcs": "phpcs --standard=PSR12 --extensions=php --ignore=*/vendor/* ./",
         "phpcsfix": "phpcbf --standard=PSR12 --extensions=php --ignore=*/vendor/* ./"
     }

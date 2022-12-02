@@ -17,9 +17,9 @@ class XMLWriter implements DriverInterface
     protected bool $hasSheet = false;
 
     /**
-     * @param mixed $stream 
-     * @param array<string,mixed> $options 
-     * @return void 
+     * @param mixed $stream
+     * @param array<string,mixed> $options
+     * @return void
      */
     public function __construct(mixed $stream, array $options = [])
     {
@@ -51,7 +51,7 @@ class XMLWriter implements DriverInterface
         }
         fwrite(
             $this->stream,
-            '<' . $this->options['sheet'] . ' name="'.htmlspecialchars($name, ENT_XML1 | ENT_COMPAT, 'UTF-8').'">'
+            '<' . $this->options['sheet'] . ' name="' . htmlspecialchars($name, ENT_XML1 | ENT_COMPAT, 'UTF-8') . '">'
         );
         $this->hasSheet = true;
         return $this;

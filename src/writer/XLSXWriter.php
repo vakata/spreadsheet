@@ -4,6 +4,7 @@ namespace vakata\spreadsheet\writer;
 
 use DateTime;
 use ZipArchive;
+use vakata\spreadsheet\Exception;
 
 class XLSXWriter implements DriverInterface
 {
@@ -20,9 +21,9 @@ class XLSXWriter implements DriverInterface
     protected ?int $activeSheet = null;
 
     /**
-     * @param mixed $stream 
-     * @param array<string,mixed> $options 
-     * @return void 
+     * @param mixed $stream
+     * @param array<string,mixed> $options
+     * @return void
      */
     public function __construct(mixed $stream, array $options = [])
     {
@@ -57,6 +58,9 @@ class XLSXWriter implements DriverInterface
     {
         $id = count($this->sheets) + 1;
         $fp = fopen($this->temp . '/xl/worksheets/sheet' . $id . '.xml', 'w');
+        if (!$fp) {
+            throw new Exception('Could not open temp file');
+        }
         $this->sheets[$id] = [
             'id'   => $id,
             'name' => $name,
@@ -107,21 +111,29 @@ class XLSXWriter implements DriverInterface
                     ) {
                         $type = null;
                         $style = 1;
-                        $value = $this->excelDate(date('Y', $v), date('m', $v), date('d', $v));
+                        $value = $this->excelDate((int)date('Y', $v), (int)date('n', $v), (int)date('j', $v));
                     } elseif (
-                        preg_match('(^\d\d\d\d-\d\d-\d\d[ T]\d\d:\d\d:\d\d(\.\d+)? ?([\+-][0-9]{2}(:[0-9]{2})?|Z|[a-z/_]+)?$)i', $value) && 
+                        // phpcs:ignore
+                        preg_match('(^\d\d\d\d-\d\d-\d\d[ T]\d\d:\d\d:\d\d(\.\d+)? ?([\+-][0-9]{2}(:[0-9]{2})?|Z|[a-z/_]+)?$)i', $value) &&
                         $v = strtotime($value)
                     ) {
                         $type = null;
                         $style = 3;
-                        $value = $this->excelDate(date('Y', $v), date('m', $v), date('d', $v), date('H', $v), date('i', $v), date('s', $v));
+                        $value = $this->excelDate(
+                            (int)date('Y', $v),
+                            (int)date('n', $v),
+                            (int)date('j', $v),
+                            (int)date('G', $v),
+                            (int)ltrim(date('i', $v), '0'),
+                            (int)ltrim(date('s', $v), '0')
+                        );
                     } elseif (
-                        (preg_match('(^\d\d:\d\d:\d\d(\.\d+)$)i', $value) || preg_match('(^\d\d:\d\d$)i', $value)) && 
+                        (preg_match('(^\d\d:\d\d:\d\d(\.\d+)$)i', $value) || preg_match('(^\d\d:\d\d$)i', $value)) &&
                         $v = strtotime($value)
                     ) {
                         $type = null;
                         $style = 2;
-                        $value = $this->excelDate(0, 0, 0, date('H', $v), date('i', $v), date('s', $v));
+                        $value = $this->excelDate(0, 0, 0, (int)date('G', $v), (int)date('i', $v), (int)date('s', $v));
                     }
                     break;
             }
@@ -133,18 +145,18 @@ class XLSXWriter implements DriverInterface
                 $cell = chr(65 + $temp) . $cell;
             }
             $cell .= $this->sheets[$this->activeSheet]['count'];
-            $content .= '<c r="' . $this->escape($cell, true) . '"';
+            $content .= '<c r="' . $this->escape((string)$cell, true) . '"';
             if (isset($type)) {
-                $content .= ' t="' . $this->escape($type, true) . '">';
+                $content .= ' t="' . $this->escape((string)$type, true) . '">';
             }
             if (isset($style)) {
-                $content .= ' s="' . $this->escape($style, true) . '"';
+                $content .= ' s="' . $this->escape((string)$style, true) . '"';
             }
             $content .= '>';
             if ($type !== 'inlineStr') {
-                $content .= '<v>' . $this->escape($value) . '</v>';
+                $content .= '<v>' . $this->escape((string)$value) . '</v>';
             } else {
-                $content .= '<is><t>' . $this->escape($value) . '</t></is>';
+                $content .= '<is><t>' . $this->escape((string)$value) . '</t></is>';
             }
             $content .= '</c>';
         }
@@ -153,8 +165,9 @@ class XLSXWriter implements DriverInterface
         return $this;
     }
 
-    public function close() : void
+    public function close(): void
     {
+        // phpcs:disable
         $content = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\r\n" .
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' .
             '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>' .
@@ -197,7 +210,7 @@ class XLSXWriter implements DriverInterface
         foreach ($this->sheets as $sheet) {
             $content .= '<Relationship Id="rId' . $sheet['id'] . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' . $sheet['id'] . '.xml"/>';
         }
-        $content .= '<Relationship Id="rId'.(count($this->sheets) + 2).'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>';
+        $content .= '<Relationship Id="rId' . (count($this->sheets) + 2) . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>';
         $content .= '</Relationships>';
         file_put_contents($this->temp . '/xl/_rels/workbook.xml.rels', $content);
 
@@ -227,6 +240,7 @@ class XLSXWriter implements DriverInterface
         }
         $content .= '</sheets>' . '</workbook>';
         file_put_contents($this->temp . '/xl/workbook.xml', $content);
+        // phpcs:enable
 
         foreach ($this->sheets as $sheet) {
             $content = '</sheetData>' . '</worksheet>';
@@ -241,7 +255,7 @@ class XLSXWriter implements DriverInterface
             new \RecursiveDirectoryIterator($this->temp, \RecursiveDirectoryIterator::SKIP_DOTS),
             \RecursiveIteratorIterator::LEAVES_ONLY
         );
-        $temp = realpath($this->temp);
+        $temp = realpath($this->temp) ?: throw new Exception('Could not get temp file');
         $index = 0;
         foreach ($iterator as $file) {
             if ($file->isFile() && $file->getFilename() !== 'xlsx.zip') {
@@ -254,7 +268,7 @@ class XLSXWriter implements DriverInterface
         }
         $zip->close();
 
-        $zip = fopen($path, 'r');
+        $zip = fopen($path, 'r') ?: throw new Exception('Could not open temp file');
         stream_copy_to_stream($zip, $this->stream);
         fclose($this->stream);
         fclose($zip);
@@ -280,7 +294,7 @@ class XLSXWriter implements DriverInterface
         int $hours = 0,
         int $minutes = 0,
         int $seconds = 0
-    ) {
+    ): int|float {
         $excelTime = (($hours * 3600) + ($minutes * 60) + $seconds) / 86400;
         if ((int)$year === 0) {
             return $excelTime;
@@ -298,11 +312,11 @@ class XLSXWriter implements DriverInterface
             $month += 9;
             --$year;
         }
-        $century = substr($year,0,2);
-        $decade = substr($year,2,2);
-        $excelDate = floor((146097 * $century) / 4) + 
-            floor((1461 * $decade) / 4) + 
-            floor((153 * $month + 2) / 5) + 
+        $century = substr((string)$year, 0, 2);
+        $decade = substr((string)$year, 2, 2);
+        $excelDate = floor((146097 * (int)$century) / 4) +
+            floor((1461 * (int)$decade) / 4) +
+            floor((153 * $month + 2) / 5) +
             $day + 1721119 - $myExcelBaseDate + ($excel1900isLeapYear ? 1 : 0);
 
         return (float)$excelDate + $excelTime;

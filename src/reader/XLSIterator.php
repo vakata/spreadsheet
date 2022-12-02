@@ -4,14 +4,14 @@ namespace vakata\spreadsheet\reader;
 
 class XLSIterator implements \Iterator
 {
-    protected $sheet = [];
+    protected array $sheet = [];
 
-    public function __construct(string $file, $desiredSheet = null)
+    public function __construct(string $file, mixed $desiredSheet = null)
     {
         $this->sheet = (new XLSHelper($file, $desiredSheet))->getSheet();
     }
 
-    public function current()
+    public function current(): mixed
     {
         $temp = current($this->sheet['cells']);
         if (is_array($temp) && isset($this->sheet['numCols'])) {
@@ -23,7 +23,7 @@ class XLSIterator implements \Iterator
         }
         return $temp;
     }
-    public function key()
+    public function key(): mixed
     {
         return key($this->sheet['cells']);
     }

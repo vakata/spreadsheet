@@ -6,17 +6,17 @@ use vakata\spreadsheet\Exception;
 
 class XLSXIterator implements \Iterator
 {
-    protected $zip;
-    protected $strings = [];
-    protected $path;
-    protected $stream;
-    protected $rest = '';
-    protected $def  = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet>';
-    protected $dim  = null;
-    protected $row  = null;
-    protected $ind  = -1;
+    protected \ZipArchive $zip;
+    protected array $strings = [];
+    protected string $path;
+    protected mixed $stream;
+    protected string $rest = '';
+    protected string $def  = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet>';
+    protected ?int $dim  = null;
+    protected ?array $row  = null;
+    protected int $ind  = -1;
 
-    public function __construct(string $file, $desiredSheet = null)
+    public function __construct(string $file, mixed $desiredSheet = null)
     {
         $this->zip = new \ZipArchive();
         if (!$this->zip->open($file)) {
@@ -24,13 +24,19 @@ class XLSXIterator implements \Iterator
         }
         $sheets = [];
         // this should be safe to extract as string (not stream)
-        $relationships = simplexml_load_string($this->zip->getFromName("_rels/.rels"));
+        $relationships = simplexml_load_string(
+            $this->zip->getFromName("_rels/.rels") ?: throw new Exception('Could not read zip')
+        ) ?: throw new Exception('Could not parse xml');
         foreach ($relationships->Relationship as $relationship) {
+            // phpcs:ignore
             if ($relationship['Type'] == 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument') {
                 // this should be safe to extract as string (not stream)
-                $workbook = simplexml_load_string($this->zip->getFromName($relationship['Target']));
+                $workbook = simplexml_load_string(
+                    // phpcs:ignore
+                    $this->zip->getFromName((string)$relationship['Target']) ?: throw new Exception('Could not read zip')
+                ) ?: throw new Exception('Could not parse xml');
                 foreach ($workbook->sheets->sheet as $sheet) {
-                    $sheets[(string)$sheet->attributes('r', true)->id] = array(
+                    $sheets[(string)$sheet->attributes('r', true)?->id] = array(
                         'id'   => (int)$sheet['sheetId'],
                         'name' => (string)$sheet['name']
                     );
@@ -38,32 +44,37 @@ class XLSXIterator implements \Iterator
                 // this should be safe to extract as string (not stream)
                 $workbookRelations = simplexml_load_string(
                     $this->zip->getFromName(
-                        dirname($relationship['Target']) . '/_rels/' . basename($relationship['Target']) . '.rels'
-                    )
-                );
+                        dirname((string)$relationship['Target']) .
+                        '/_rels/' .
+                        basename((string)$relationship['Target']) . '.rels'
+                    ) ?: throw new Exception('Could not read zip')
+                ) ?: throw new Exception('Could not parse xml');
                 foreach ($workbookRelations->Relationship as $workbookRelation) {
                     switch ($workbookRelation['Type']) {
                         case 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet':
-                            $sheets[(string)$workbookRelation['Id']]['path'] = dirname($relationship['Target']) . '/' . (string)$workbookRelation['Target'];
+                            $sheets[(string)$workbookRelation['Id']]['path'] =
+                                dirname((string)$relationship['Target']) . '/' .
+                                (string)$workbookRelation['Target'];
                             break;
                         case 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings':
                             // THIS MIGHT NOT BE SAFE TO EXTRACT AS A STRING - PROBABLY SWITCH TO INCREMENTAL READ?
                             $sharedStrings = simplexml_load_string(
                                 $this->zip->getFromName(
-                                    dirname($relationship['Target']) . '/' . (string)$workbookRelation['Target']
-                                )
-                            );
-                            foreach ($sharedStrings->si as $val) {
-                                if (isset($val->t)) {
-                                    $this->strings[] = (string)$val->t;
-                                } elseif (isset($val->r)) {
-                                    $temp = [];
-                                    foreach ($val->r as $part) {
-                                        $temp[] = (string)$part->t;
-                                    }
-                                    $this->strings[] = implode(' ', $temp);
+                                    dirname((string)$relationship['Target']) . '/' . (string)$workbookRelation['Target']
+                                    // phpcs:ignore
+                                ) ?: throw new Exception('Could not read zip')
+                            ) ?: throw new Exception('Could not parse xml');
+                        foreach ($sharedStrings->si as $val) {
+                            if (isset($val->t)) {
+                                $this->strings[] = (string)$val->t;
+                            } elseif (isset($val->r)) {
+                                $temp = [];
+                                foreach ($val->r as $part) {
+                                    $temp[] = (string)$part->t;
                                 }
+                                $this->strings[] = implode(' ', $temp);
                             }
+                        }
                             break;
                     }
                 }
@@ -75,13 +86,13 @@ class XLSXIterator implements \Iterator
         }
         $desiredSheet = $desiredSheet ?? '0';
         foreach ($sheets as $sheet) {
-            if ($sheet['name'] === $desiredSheet) {
+            if ($sheet['name'] === $desiredSheet && isset($sheet['path'])) {
                 $this->path = $sheet['path'];
             }
         }
         if (!isset($this->path) && is_numeric($desiredSheet)) {
             $sheets = array_values($sheets);
-            if (isset($sheets[(int)$desiredSheet])) {
+            if (isset($sheets[(int)$desiredSheet]) && isset($sheets[(int)$desiredSheet]['path'])) {
                 $this->path = $sheets[(int)$desiredSheet]['path'];
             }
         }
@@ -97,10 +108,10 @@ class XLSXIterator implements \Iterator
         $beg = $this->read('<dimension');
         if (isset($beg)) {
             $end = $this->read('>');
-            $this->dim = $this->getCellIndex(explode(':', explode('"', $end)[1])[1]);
+            $this->dim = (int)$this->getCellIndex(explode(':', explode('"', (string)$end)[1] ?? '')[1] ?? '');
         }
     }
-    protected function getCellIndex($cell)
+    protected function getCellIndex(string $cell): int
     {
         $matches = [];
         if (!preg_match("/([A-Z]+)(\d+)/", $cell, $matches)) {
@@ -114,7 +125,7 @@ class XLSXIterator implements \Iterator
         }
         return $ind;
     }
-    protected function getCellValue($cell)
+    protected function getCellValue(mixed $cell): mixed
     {
         // $cell['t'] is the cell type
         switch ((string)$cell["t"]) {
@@ -145,7 +156,7 @@ class XLSXIterator implements \Iterator
             case "e": // Value is an error message
                 return (string)$cell->v;
             default:
-                if(!isset($cell->v)) {
+                if (!isset($cell->v)) {
                     return null;
                 }
                 $value = (string)$cell->v;
@@ -153,22 +164,22 @@ class XLSXIterator implements \Iterator
                 if (is_numeric($value)) {
                     if ($value == (int)$value) {
                         $value = (int)$value;
-                    } else if ($value == (float)$value) {
+                    } elseif ($value == (float)$value) {
                         $value = (float)$value;
-                    } else if ($value == (double)$value) {
+                    } elseif ($value == (double)$value) {
                         $value = (double)$value;
                     }
                 }
                 return $value;
         }
     }
-    protected function read(string $end)
+    protected function read(string $end): ?string
     {
         $size = strlen($end);
         $data = $this->rest;
         while (!feof($this->stream)) {
             $data .= fread($this->stream, $size);
-            if (strpos($data, $end) !== false) {
+            if (strpos($data, $end) !== false && $end) {
                 $temp = explode($end, $data, 2);
                 $this->rest = $temp[1];
                 return $temp[0] . $end;
@@ -196,11 +207,11 @@ class XLSXIterator implements \Iterator
             $this->row = null;
             return;
         }
-        $data = simplexml_load_string($this->def . '<row ' . $temp . '</worksheet>');
+        $data = simplexml_load_string($this->def . '<row ' . $temp . '</worksheet>') ?: throw new Exception('XML');
         $this->ind = (int)$data->row['r'];
-        $this->row = array_fill(0, $this->dim, null);
+        $this->row = array_fill(0, $this->dim ?? 0, null);
         foreach ($data->row->c as $cell) {
-            $this->row[$this->getCellIndex($cell['r']) - 1] = $this->getCellValue($cell);
+            $this->row[$this->getCellIndex((string)$cell['r']) - 1] = $this->getCellValue($cell);
         }
     }
     public function rewind(): void

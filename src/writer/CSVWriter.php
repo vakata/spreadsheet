@@ -16,9 +16,9 @@ class CSVWriter implements DriverInterface
     protected array $options;
 
     /**
-     * @param mixed $stream 
-     * @param array<string,mixed> $options 
-     * @return void 
+     * @param mixed $stream
+     * @param array<string,mixed> $options
+     * @return void
      */
     public function __construct(mixed $stream, array $options = [])
     {

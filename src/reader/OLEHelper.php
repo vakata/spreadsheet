@@ -1,31 +1,32 @@
 <?php
+
 namespace vakata\spreadsheet\reader;
 
 use vakata\spreadsheet\Exception;
 
 class OLEHelper
 {
-    protected $data = '';
-    protected $excl = '';
-    protected $bigBlocks = [];
-    protected $smallBlocks = [];
+    protected string $data = '';
+    protected string $excl = '';
+    protected array $bigBlocks = [];
+    protected array $smallBlocks = [];
 
-    public static function getInt4d($data, $pos)
+    public static function getInt4d(string $data, int $pos): int
     {
-        $value = ord($data[$pos]) | (ord($data[$pos+1])	<< 8) | (ord($data[$pos+2]) << 16) | (ord($data[$pos+3]) << 24);
+        $value = ord($data[$pos]) |
+            (ord($data[$pos + 1]) << 8) |
+            (ord($data[$pos + 2]) << 16) |
+            (ord($data[$pos + 3]) << 24);
         if ($value >= 4294967294) {
             $value = -2;
         }
         return $value;
     }
 
-    public function __construct($sFileName)
+    public function __construct(string $sFileName)
     {
-        $this->data = @file_get_contents($sFileName);
-        if (!$this->data) {
-            throw new Exception('Could not read data');
-        }
-        if (substr($this->data, 0, 8) != pack("CCCCCCCC",0xd0,0xcf,0x11,0xe0,0xa1,0xb1,0x1a,0xe1)) {
+        $this->data = @file_get_contents($sFileName) ?: throw new Exception('Could not read file');
+        if (substr($this->data, 0, 8) != pack("CCCCCCCC", 0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1)) {
             throw new Exception('Invalid file');
         }
         $numBigBlockDepotBlocks = self::getInt4d($this->data, 0x2c);
@@ -38,7 +39,7 @@ class OLEHelper
         $pos = 0x4c;
         $bbdBlocks = $numBigBlockDepotBlocks;
         if ($numExtensionBlocks != 0) {
-            $bbdBlocks = (0x200 - 0x4c)/4;
+            $bbdBlocks = (0x200 - 0x4c) / 4;
         }
 
         for ($i = 0; $i < $bbdBlocks; $i++) {
@@ -64,7 +65,7 @@ class OLEHelper
         // readBigBlockDepot
         for ($i = 0; $i < $numBigBlockDepotBlocks; $i++) {
             $pos = ($bigBlockDepotBlocks[$i] + 1) * 0x200;
-            for ($j = 0 ; $j < 0x200 / 4; $j++) {
+            for ($j = 0; $j < 0x200 / 4; $j++) {
                 $this->bigBlocks[] = self::getInt4d($this->data, $pos);
                 $pos += 4;
             }
@@ -79,19 +80,19 @@ class OLEHelper
             }
             $sbdBlock = $this->bigBlocks[$sbdBlock];
         }
-        
+
         $properties = $this->readData($rootStartBlock);
         $root = null;
         $book = null;
         $pos = 0;
         while ($pos < strlen($properties)) {
             $temp = substr($properties, $pos, 0x80);
-            $lngt = ord($temp[0x40]) | (ord($temp[0x40+1]) << 8);
+            $lngt = ord($temp[0x40]) | (ord($temp[0x40 + 1]) << 8);
             $type = ord($temp[0x42]);
             $strt = self::getInt4d($temp, 0x74);
             $size = self::getInt4d($temp, 0x78);
             $name = '';
-            for ($i = 0; $i < $lngt ; $i++) {
+            for ($i = 0; $i < $lngt; $i++) {
                 $name .= $temp[$i];
             }
             $name = str_replace("\x00", "", $name);
@@ -113,34 +114,36 @@ class OLEHelper
             }
             $pos += 0x80;
         }
-        if ($book['size'] < 0x1000){
-            $rootdata = $this->readData($root['strt']);
-            $block = $book['strt'];
-            while ($block != -2) {
-                $pos = $block * 0x40;
-                $this->excl .= substr($rootdata, $pos, 0x40);
-                $block = $this->smallBlocks[$block];
-            }
-        } else {
-            $numBlocks = $book['size'] / 0x200;
-            if ($book['size'] % 0x200 != 0) {
-                $numBlocks++;
-            }
-            if ($numBlocks > 0) {
+        if (isset($book) && isset($root)) {
+            if ($book['size'] < 0x1000) {
+                $rootdata = $this->readData($root['strt']);
                 $block = $book['strt'];
                 while ($block != -2) {
-                    $pos = ($block + 1) * 0x200;
-                    $this->excl .= substr($this->data, $pos, 0x200);
-                    $block = $this->bigBlocks[$block];
+                    $pos = $block * 0x40;
+                    $this->excl .= substr($rootdata, $pos, 0x40);
+                    $block = $this->smallBlocks[$block];
+                }
+            } else {
+                $numBlocks = $book['size'] / 0x200;
+                if ($book['size'] % 0x200 != 0) {
+                    $numBlocks++;
+                }
+                if ($numBlocks > 0) {
+                    $block = $book['strt'];
+                    while ($block != -2) {
+                        $pos = ($block + 1) * 0x200;
+                        $this->excl .= substr($this->data, $pos, 0x200);
+                        $block = $this->bigBlocks[$block];
+                    }
                 }
             }
         }
     }
 
-    protected function readData($block)
+    protected function readData(int $block): string
     {
         $data = '';
-        while ($block != -2)  {
+        while ($block != -2) {
             $pos   = ($block + 1) * 0x200;
             $data  = $data . substr($this->data, $pos, 0x200);
             $block = $this->bigBlocks[$block];
@@ -148,7 +151,7 @@ class OLEHelper
         return $data;
     }
 
-    public function workbook()
+    public function workbook(): string
     {
         return $this->excl;
     }
