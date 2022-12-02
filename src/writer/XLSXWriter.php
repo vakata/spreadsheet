@@ -2,6 +2,7 @@
 
 namespace vakata\spreadsheet\writer;
 
+use DateTime;
 use ZipArchive;
 
 class XLSXWriter implements DriverInterface
@@ -83,6 +84,10 @@ class XLSXWriter implements DriverInterface
         $content .= ' spans="1:' . count($data) . '">';
         foreach (array_values($data) as $k => $value) {
             $type = null;
+            $style = null;
+            if ($value instanceof DateTime) {
+                $value = $value->format('c');
+            }
             switch (gettype($value)) {
                 case 'boolean':
                     $type = 'b';
@@ -97,12 +102,26 @@ class XLSXWriter implements DriverInterface
                     if (
                         (
                             preg_match('(^\d\d\.\d\d\.\d\d\d\d$)', $value) ||
-                            preg_match('(^\d\d\d\d\-\d\d-\d\d$)', $value) ||
-                            preg_match('(^\d\d\d\d-\d\d-\d\d[ T]\d\d:\d\d:\d\d(\.\d+)? ?([\+-][0-9]{2}(:[0-9]{2})?|Z|[a-z/_]+)?$)i', $value)
-                        ) && strtotime($value)
+                            preg_match('(^\d\d\d\d\-\d\d-\d\d$)', $value)
+                        ) && $v = strtotime($value)
                     ) {
-                        $type = 'c';
-                        $value = date('c', strtotime($value));
+                        $type = null;
+                        $style = 1;
+                        $value = $this->excelDate(date('Y', $v), date('m', $v), date('d', $v));
+                    } elseif (
+                        preg_match('(^\d\d\d\d-\d\d-\d\d[ T]\d\d:\d\d:\d\d(\.\d+)? ?([\+-][0-9]{2}(:[0-9]{2})?|Z|[a-z/_]+)?$)i', $value) && 
+                        $v = strtotime($value)
+                    ) {
+                        $type = null;
+                        $style = 3;
+                        $value = $this->excelDate(date('Y', $v), date('m', $v), date('d', $v), date('H', $v), date('i', $v), date('s', $v));
+                    } elseif (
+                        (preg_match('(^\d\d:\d\d:\d\d(\.\d+)$)i', $value) || preg_match('(^\d\d:\d\d$)i', $value)) && 
+                        $v = strtotime($value)
+                    ) {
+                        $type = null;
+                        $style = 2;
+                        $value = $this->excelDate(0, 0, 0, date('H', $v), date('i', $v), date('s', $v));
                     }
                     break;
             }
@@ -114,7 +133,14 @@ class XLSXWriter implements DriverInterface
                 $cell = chr(65 + $temp) . $cell;
             }
             $cell .= $this->sheets[$this->activeSheet]['count'];
-            $content .= '<c r="' . $this->escape($cell, true) . '" t="' . $this->escape($type, true) . '">';
+            $content .= '<c r="' . $this->escape($cell, true) . '"';
+            if (isset($type)) {
+                $content .= ' t="' . $this->escape($type, true) . '">';
+            }
+            if (isset($style)) {
+                $content .= ' s="' . $this->escape($style, true) . '"';
+            }
+            $content .= '>';
             if ($type !== 'inlineStr') {
                 $content .= '<v>' . $this->escape($value) . '</v>';
             } else {
@@ -137,6 +163,12 @@ class XLSXWriter implements DriverInterface
         '</Relationships>';
         file_put_contents($this->temp . '/_rels/.rels', $content);
 
+        $content = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">
+            <TotalTime>0</TotalTime>
+            <Application>XLSXWriter</Application></Properties>';
+        file_put_contents($this->temp . '/docProps/app.xml', $content);
+
         $content = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\r\n" .
             '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' .
                 '<dc:creator>' . $this->escape($this->options['user']) . '</dc:creator>' .
@@ -152,7 +184,8 @@ class XLSXWriter implements DriverInterface
                 '<Default Extension="xml" ContentType="application/xml"/>' .
                 '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' .
                 '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>' .
-                '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>';
+                '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>' .
+                '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>';
         foreach ($this->sheets as $sheet) {
             $content .= '<Override PartName="/xl/worksheets/sheet' . $sheet['id'] . '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
         }
@@ -164,8 +197,27 @@ class XLSXWriter implements DriverInterface
         foreach ($this->sheets as $sheet) {
             $content .= '<Relationship Id="rId' . $sheet['id'] . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' . $sheet['id'] . '.xml"/>';
         }
+        $content .= '<Relationship Id="rId'.(count($this->sheets) + 2).'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>';
         $content .= '</Relationships>';
         file_put_contents($this->temp . '/xl/_rels/workbook.xml.rels', $content);
+
+        $content = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+        <fonts count="1"><font><name val="Calibri"/><family val="2"/></font></fonts>
+        <fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
+        <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+        <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" /></cellStyleXfs>
+        <cellXfs count="4">
+            <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" />
+            <xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" />
+            <xf numFmtId="20" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" />
+            <xf numFmtId="22" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" />
+        </cellXfs>
+        <cellStyles count="1">
+            <cellStyle name="Normal" xfId="0" builtinId="0"/>
+        </cellStyles>
+        </styleSheet>';
+        file_put_contents($this->temp . '/xl/styles.xml', $content);
 
         $content = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\r\n" .
         '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' .
@@ -219,5 +271,40 @@ class XLSXWriter implements DriverInterface
             }
         }
         rmdir($this->temp);
+    }
+
+    public static function excelDate(
+        int $year,
+        int $month,
+        int $day,
+        int $hours = 0,
+        int $minutes = 0,
+        int $seconds = 0
+    ) {
+        $excelTime = (($hours * 3600) + ($minutes * 60) + $seconds) / 86400;
+        if ((int)$year === 0) {
+            return $excelTime;
+        }
+        $excel1900isLeapYear = true;
+        if (($year === 1900) && ($month <= 2)) {
+            $excel1900isLeapYear = false;
+        }
+        $myExcelBaseDate = 2415020;
+
+        // Julian base date Adjustment
+        if ($month > 2) {
+            $month -= 3;
+        } else {
+            $month += 9;
+            --$year;
+        }
+        $century = substr($year,0,2);
+        $decade = substr($year,2,2);
+        $excelDate = floor((146097 * $century) / 4) + 
+            floor((1461 * $decade) / 4) + 
+            floor((153 * $month + 2) / 5) + 
+            $day + 1721119 - $myExcelBaseDate + ($excel1900isLeapYear ? 1 : 0);
+
+        return (float)$excelDate + $excelTime;
     }
 }
