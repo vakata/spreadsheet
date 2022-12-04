@@ -1,6 +1,6 @@
 {
     "name": "vakata/spreadsheet",
-    "description": "Simple spreadsheet reader supporting XLS, XLSX and CSV files",
+    "description": "Simple spreadsheet reader/writer supporting XLS (read-only), XLSX and CSV files",
     "keywords": [
         "vakata",
         "spreadsheet",
