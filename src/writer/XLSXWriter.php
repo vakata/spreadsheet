@@ -261,7 +261,7 @@ class XLSXWriter implements DriverInterface
             if ($file->isFile() && $file->getFilename() !== 'xlsx.zip') {
                 $filePath = $file->getRealPath();
                 $relativePath = substr($filePath, strlen($temp) + 1);
-                $zip->addFile($filePath, $relativePath);
+                $zip->addFile($filePath, str_replace('\\', '/', $relativePath));
                 $zip->setCompressionIndex($index, ZipArchive::CM_STORE);
                 $index++;
             }
