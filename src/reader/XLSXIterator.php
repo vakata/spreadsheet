@@ -8,6 +8,7 @@ class XLSXIterator implements \Iterator
 {
     protected \ZipArchive $zip;
     protected array $strings = [];
+    protected array $styles = [];
     protected string $path;
     protected mixed $stream;
     protected string $rest = '';
@@ -64,17 +65,31 @@ class XLSXIterator implements \Iterator
                                     // phpcs:ignore
                                 ) ?: throw new Exception('Could not read zip')
                             ) ?: throw new Exception('Could not parse xml');
-                        foreach ($sharedStrings->si as $val) {
-                            if (isset($val->t)) {
-                                $this->strings[] = (string)$val->t;
-                            } elseif (isset($val->r)) {
-                                $temp = [];
-                                foreach ($val->r as $part) {
-                                    $temp[] = (string)$part->t;
+                            foreach ($sharedStrings->si as $val) {
+                                if (isset($val->t)) {
+                                    $this->strings[] = (string)$val->t;
+                                } elseif (isset($val->r)) {
+                                    $temp = [];
+                                    foreach ($val->r as $part) {
+                                        $temp[] = (string)$part->t;
+                                    }
+                                    $this->strings[] = implode(' ', $temp);
                                 }
-                                $this->strings[] = implode(' ', $temp);
                             }
-                        }
+                            break;
+                        case 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles':
+                            $styles = simplexml_load_string(
+                                $this->zip->getFromName(
+                                    dirname((string)$relationship['Target']) . '/' . (string)$workbookRelation['Target']
+                                ) ?: throw new Exception('Could not read zip')
+                            ) ?: throw new Exception('Could not parse xml');
+                            $i = 0;
+                            foreach ($styles?->cellXfs[0]?->xf ?? [] as $k => $v) {
+                                if (in_array((int)$v['numFmtId'], [14,20,22]) && (int)$v['applyNumberFormat']) {
+                                    $this->styles[$i] = (int)$v['numFmtId'];
+                                }
+                                $i++;
+                            }
                             break;
                     }
                 }
@@ -160,15 +175,28 @@ class XLSXIterator implements \Iterator
                     return null;
                 }
                 $value = (string)$cell->v;
-                // Check for numeric values
-                if (is_numeric($value)) {
-                    if ($value == (int)$value) {
-                        $value = (int)$value;
-                    } elseif ($value == (float)$value) {
-                        $value = (float)$value;
-                    } elseif ($value == (double)$value) {
-                        $value = (double)$value;
-                    }
+                switch ($this->styles[(int)$cell['s']] ?? 0) {
+                    case 14:
+                        $value = date('Y-m-d', self::timestamp((float)$value));
+                        break;
+                    case 20:
+                        $value = date('H:i', self::timestamp((float)$value));
+                        break;
+                    case 22:
+                        $value = date('Y-m-d H:i:s', self::timestamp((float)$value));
+                        break;
+                    default:
+                        // check for numeric values
+                        if (is_numeric($value)) {
+                            if ($value == (int)$value) {
+                                $value = (int)$value;
+                            } elseif ($value == (float)$value) {
+                                $value = (float)$value;
+                            } elseif ($value == (double)$value) {
+                                $value = (double)$value;
+                            }
+                        }
+                        break;
                 }
                 return $value;
         }
@@ -225,5 +253,14 @@ class XLSXIterator implements \Iterator
     public function valid(): bool
     {
         return $this->row !== null;
+    }
+    public static function timestamp(float|int $excelDateTime): int
+    {
+        $d = floor($excelDateTime); // days since 1900 or 1904
+        $t = $excelDateTime - $d;
+
+        $t = (abs($d) > 0) ? ($d - 25569) * 86400 + round($t * 86400) : round($t * 86400);
+
+        return (int)$t;
     }
 }
