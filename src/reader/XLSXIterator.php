@@ -57,14 +57,14 @@ class XLSXIterator implements \Iterator
                                 dirname((string)$relationship['Target']) . '/' .
                                 (string)$workbookRelation['Target'];
                             break;
+                        // phpcs:disable
                         case 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings':
                             // THIS MIGHT NOT BE SAFE TO EXTRACT AS A STRING - PROBABLY SWITCH TO INCREMENTAL READ?
                             $sharedStrings = simplexml_load_string(
                                 $this->zip->getFromName(
                                     dirname((string)$relationship['Target']) . '/' . (string)$workbookRelation['Target']
-                                    // phpcs:ignore
-                                ) ?: throw new Exception('Could not read zip')
-                            ) ?: throw new Exception('Could not parse xml');
+                                ) ?: throw new Exception('Could not read zip') // phpcs:ignore
+                            ) ?: throw new Exception('Could not parse xml'); // phpcs:ignore
                             foreach ($sharedStrings->si as $val) {
                                 if (isset($val->t)) {
                                     $this->strings[] = (string)$val->t;
@@ -77,12 +77,14 @@ class XLSXIterator implements \Iterator
                                 }
                             }
                             break;
+                            // phpcs:enable
                         case 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles':
+                            // phpcs:disable
                             $styles = simplexml_load_string(
                                 $this->zip->getFromName(
                                     dirname((string)$relationship['Target']) . '/' . (string)$workbookRelation['Target']
-                                ) ?: throw new Exception('Could not read zip')
-                            ) ?: throw new Exception('Could not parse xml');
+                                ) ?: throw new Exception('Could not read zip') // phpcs:ignore
+                            ) ?: throw new Exception('Could not parse xml'); // phpcs:ignore
                             $i = 0;
                             foreach ($styles?->cellXfs[0]?->xf ?? [] as $k => $v) {
                                 if (in_array((int)$v['numFmtId'], [14,20,22]) && (int)$v['applyNumberFormat']) {
@@ -90,6 +92,7 @@ class XLSXIterator implements \Iterator
                                 }
                                 $i++;
                             }
+                            // phpcs:enable
                             break;
                     }
                 }
@@ -143,7 +146,9 @@ class XLSXIterator implements \Iterator
     protected function getCellValue(mixed $cell): mixed
     {
         // $cell['t'] is the cell type
-        switch ((string)$cell["t"]) {
+        $t = (string)$cell['t'];
+        $s = (int)$cell['s'];
+        switch ($t) {
             case "s": // Value is a shared string
                 return (string)$cell->v !== '' ? ($this->strings[intval($cell->v)] ?? '') : '';
             case "b": // Value is boolean
@@ -175,7 +180,7 @@ class XLSXIterator implements \Iterator
                     return null;
                 }
                 $value = (string)$cell->v;
-                switch ($this->styles[(int)$cell['s']] ?? 0) {
+                switch ($this->styles[$s] ?? 0) {
                     case 14:
                         $value = gmdate('Y-m-d', self::timestamp((float)$value));
                         break;
