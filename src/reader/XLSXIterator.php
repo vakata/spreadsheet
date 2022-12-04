@@ -177,13 +177,13 @@ class XLSXIterator implements \Iterator
                 $value = (string)$cell->v;
                 switch ($this->styles[(int)$cell['s']] ?? 0) {
                     case 14:
-                        $value = date('Y-m-d', self::timestamp((float)$value));
+                        $value = gmdate('Y-m-d', self::timestamp((float)$value));
                         break;
                     case 20:
-                        $value = date('H:i', self::timestamp((float)$value));
+                        $value = gmdate('H:i', self::timestamp((float)$value));
                         break;
                     case 22:
-                        $value = date('Y-m-d H:i:s', self::timestamp((float)$value));
+                        $value = gmdate('Y-m-d H:i:s', self::timestamp((float)$value));
                         break;
                     default:
                         // check for numeric values
