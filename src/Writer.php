@@ -39,24 +39,35 @@ class Writer
     public static function toBrowser(string $format = 'xlsx', array $options = [], ?string $filename = null): static
     {
         if ($filename) {
-            switch ($format) {
-                case 'xlsx':
-                    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-                    break;
-                case 'csv':
-                    header('Content-Type: text/csv; charset=utf-8');
-                    break;
-                case 'xml':
-                    header('Content-Type: text/xml; charset=utf-8');
-                    break;
-                default:
-                    throw new Exception('Unsupported format');
+            foreach (static::headers($format, $filename) as $k => $v) {
+                header($k . ': ' . $v);
             }
-            header('Content-Disposition: attachment; ' .
-                'filename="' . preg_replace('([^a-z0-9.-]+)i', '_', $filename) . '"; ' .
-                'filename*=UTF-8\'\'' . rawurlencode($filename));
         }
         return static::toStream(fopen('php://output', 'wb'), $format, $options);
+    }
+
+    public static function headers(string $format, ?string $filename = null): array
+    {
+        $headers = [];
+        switch ($format) {
+            case 'xlsx':
+                $headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+                break;
+            case 'csv':
+                $headers['Content-Type'] = 'text/csv; charset=utf-8';
+                break;
+            case 'xml':
+                $headers['Content-Type'] = 'text/xml; charset=utf-8';
+                break;
+            default:
+                throw new Exception('Unsupported format');
+        }
+        if ($filename) {
+            $headers['Content-Disposition'] = 'attachment; ' .
+                'filename="' . preg_replace('([^a-z0-9.-]+)i', '_', $filename) . '"; ' .
+                'filename*=UTF-8\'\'' . rawurlencode($filename);
+        }
+        return $headers;
     }
 
     public function getDriver(): DriverInterface
