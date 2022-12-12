@@ -32,7 +32,8 @@ class XLSXWriter implements DriverInterface
             [
                 'temp' => sys_get_temp_dir(),
                 'user' => 'XLSXWriter',
-                'created' => date('c')
+                'created' => date('c'),
+                'defaultSheet' => null
             ],
             $options
         );
@@ -44,6 +45,9 @@ class XLSXWriter implements DriverInterface
         foreach ([ '_rels', 'docProps', 'xl/_rels', 'xl/worksheets' ] as $dir) {
             mkdir($this->temp . DIRECTORY_SEPARATOR . $dir, 0775, true);
             chmod($this->temp . DIRECTORY_SEPARATOR . $dir, 0775);
+        }
+        if (isset($this->options['defaultSheet']) && is_string($this->options['defaultSheet'])) {
+            $this->addSheet($this->options['defaultSheet']);
         }
     }
 
