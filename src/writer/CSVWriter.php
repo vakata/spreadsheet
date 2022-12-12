@@ -28,10 +28,18 @@ class CSVWriter implements DriverInterface
                 'separator' => ',',
                 'enclosure' => '"',
                 'escape' => '\\',
-                'eol' => "\n"
+                'eol' => "\n",
+                'excel' => false
             ],
             $options
         );
+        if ($this->options['excel']) {
+            $this->options['separator'] = ';';
+            $this->options['enclosure'] = '"';
+            $this->options['escape'] = '\\';
+            $this->options['eol'] = "\r\n";
+            fputs($this->stream, (chr(0xEF) . chr(0xBB) . chr(0xBF)));
+        }
     }
     public function setSheetName(string $name): DriverInterface
     {
