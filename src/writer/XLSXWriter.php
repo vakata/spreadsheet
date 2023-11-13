@@ -148,13 +148,18 @@ class XLSXWriter implements DriverInterface
             $this->sheets[$this->activeSheet]['freezeRow'] = $this->sheets[$this->activeSheet]['count'];
         }
         foreach (array_values($data) as $k => $value) {
+            $format = '';
+            $v = $value;
+            if (is_array($v) && count($v) === 2) {
+                $v = (string)array_values($value)[0];
+                $format = array_values($value)[1];
+            }
             if ($header) {
                 $this->options['sharedStrings'] = true;
-                if (!is_array($value)) {
-                    $value = (string)$value;
-                }
+                $format .= 'b';
+                $v = (string)$v;
             }
-            $v = is_array($value) ? (string)(array_values($value)[0]) : (string)$value;
+            
             if (
                 $this->options['autoWidth'] &&
                 (
@@ -166,10 +171,10 @@ class XLSXWriter implements DriverInterface
             }
             $type = null;
             $style = null;
-            if ($value instanceof DateTime) {
-                $value = $value->format('c');
+            if ($v instanceof DateTime) {
+                $v = $v->format('c');
             }
-            switch (gettype($value)) {
+            switch (gettype($v)) {
                 case 'boolean':
                     $type = 'b';
                     break;
@@ -178,46 +183,38 @@ class XLSXWriter implements DriverInterface
                     $type = 'n';
                     break;
                 default:
-                    $format = '';
-                    if (is_array($value) && count($value) === 2) {
-                        $format = array_values($value)[1];
-                        $value = array_values($value)[0];
-                    }
-                    if ($header) {
-                        $format .= 'b';
-                    }
-                    $value = (string)$value;
+                    $v = (string)$v;
                     if (
                         (
-                            preg_match('(^\d\d\.\d\d\.\d\d\d\d$)', $value) ||
-                            preg_match('(^\d\d\d\d\-\d\d-\d\d$)', $value)
-                        ) && $v = strtotime($value)
+                            preg_match('(^\d\d\.\d\d\.\d\d\d\d$)', $v) ||
+                            preg_match('(^\d\d\d\d\-\d\d-\d\d$)', $v)
+                        ) && $tmp = strtotime($v)
                     ) {
                         $type = null;
                         $style = 1;
-                        $value = $this->excelDate((int)date('Y', $v), (int)date('n', $v), (int)date('j', $v));
+                        $v = $this->excelDate((int)date('Y', $tmp), (int)date('n', $tmp), (int)date('j', $tmp));
                     } elseif (
                         // phpcs:ignore
-                        preg_match('(^\d\d\d\d-\d\d-\d\d[ T]\d\d:\d\d:\d\d(\.\d+)? ?([\+-][0-9]{2}(:[0-9]{2})?|Z|[a-z/_]+)?$)i', $value) &&
-                        $v = strtotime($value)
+                        preg_match('(^\d\d\d\d-\d\d-\d\d[ T]\d\d:\d\d:\d\d(\.\d+)? ?([\+-][0-9]{2}(:[0-9]{2})?|Z|[a-z/_]+)?$)i', $v) &&
+                        $tmp = strtotime($v)
                     ) {
                         $type = null;
                         $style = 3;
-                        $value = $this->excelDate(
-                            (int)date('Y', $v),
-                            (int)date('n', $v),
-                            (int)date('j', $v),
-                            (int)date('G', $v),
-                            (int)ltrim(date('i', $v), '0'),
-                            (int)ltrim(date('s', $v), '0')
+                        $v = $this->excelDate(
+                            (int)date('Y', $tmp),
+                            (int)date('n', $tmp),
+                            (int)date('j', $tmp),
+                            (int)date('G', $tmp),
+                            (int)ltrim(date('i', $tmp), '0'),
+                            (int)ltrim(date('s', $tmp), '0')
                         );
                     } elseif (
-                        (preg_match('(^\d\d:\d\d:\d\d(\.\d+)$)i', $value) || preg_match('(^\d\d:\d\d$)i', $value)) &&
-                        $v = strtotime($value)
+                        (preg_match('(^\d\d:\d\d:\d\d(\.\d+)$)i', $v) || preg_match('(^\d\d:\d\d$)i', $v)) &&
+                        $tmp = strtotime($v)
                     ) {
                         $type = null;
                         $style = 2;
-                        $value = $this->excelDate(0, 0, 0, (int)date('G', $v), (int)date('i', $v), (int)date('s', $v));
+                        $v = $this->excelDate(0, 0, 0, (int)date('G', $tmp), (int)date('i', $tmp), (int)date('s', $tmp));
                     } else {
                         if ($this->options['sharedStrings']) {
                             $type = 's';
@@ -225,7 +222,7 @@ class XLSXWriter implements DriverInterface
                             if (strlen($format)) {
                                 $temp = chr(0) . $format;
                             }
-                            $value = $this->getSharedStringValue($value . $temp);
+                            $v = $this->getSharedStringValue($v . $temp);
                         } else {
                             $type = 'inlineStr';
                         }
@@ -246,9 +243,9 @@ class XLSXWriter implements DriverInterface
             }
             $content .= '>';
             if ($type !== 'inlineStr') {
-                $content .= '<v>' . $this->escape((string)$value) . '</v>';
+                $content .= '<v>' . $this->escape((string)$v) . '</v>';
             } else {
-                $content .= '<is><t>' . $this->escape((string)$value) . '</t></is>';
+                $content .= '<is><t>' . $this->escape((string)$v) . '</t></is>';
             }
             $content .= '</c>';
         }
