@@ -19,6 +19,7 @@ class XLSXWriter implements DriverInterface
     protected string $temp;
     protected array $sheets = [];
     protected ?int $activeSheet = null;
+    protected array $sharedStrings = [];
 
     /**
      * @param mixed $stream
@@ -33,7 +34,10 @@ class XLSXWriter implements DriverInterface
                 'temp' => sys_get_temp_dir(),
                 'user' => 'XLSXWriter',
                 'created' => date('c'),
-                'defaultSheet' => null
+                'defaultSheet' => null,
+                'sharedStrings' => true,
+                'autoWidth' => true,
+                'minWidth' => 4
             ],
             $options
         );
@@ -62,14 +66,23 @@ class XLSXWriter implements DriverInterface
     {
         $id = count($this->sheets) + 1;
         $fp = fopen($this->temp . '/xl/worksheets/sheet' . $id . '.xml', 'w');
+        $tm = fopen($this->temp . '/xl/worksheets/sheet' . $id . '.xml.tmp', 'w');
         if (!$fp) {
             throw new Exception('Could not open temp file');
         }
         $this->sheets[$id] = [
-            'id'   => $id,
-            'name' => $name,
-            'count' => 0,
-            'stream' => $fp
+            'id'            => $id,
+            'name'          => $name,
+            'count'         => 0,
+            'stream'        => $fp,
+            'streamd'       => $tm,
+            'minRow'        => 0,
+            'maxRow'        => 0,
+            'minCell'       => 0,
+            'maxCell'       => 0,
+            'freezeRow'     => null,
+            'filterRow'     => null,
+            'widths'        => []
         ];
         fwrite(
             $fp,
@@ -77,20 +90,72 @@ class XLSXWriter implements DriverInterface
                 '<worksheet ' .
                 ' xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' .
                 ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"' .
-                '><sheetData>'
+                '>'
         );
+        fwrite($tm, '<sheetData>');
         $this->activeSheet = $id;
         return $this;
     }
-    public function addRow(array $data): DriverInterface
+    protected function getSharedStringValue(string $key) : int
+    {
+        if (!isset($this->sharedStrings[$key])) {
+            $this->sharedStrings[$key] = [
+                'count' => 0,
+                'index' => count($this->sharedStrings)
+            ];
+        }
+        $this->sharedStrings[$key]['count']++;
+
+        return $this->sharedStrings[$key]['index'];
+    }
+    protected function getCellFromIndex(int $k) : string
+    {
+        $cell = '';
+        $index = $k + 1;
+        while ($index !== 0) {
+            $temp = (($index - 1) % 26);
+            $index = (int) (($index - $temp) / 25);
+            $cell = chr(65 + $temp) . $cell;
+        }
+
+        return $cell;
+    }
+    public function addRow(
+        array $data,
+        bool $header = false,
+        bool $filter = false,
+        bool $freeze = false
+    ): DriverInterface
     {
         if (!$this->activeSheet) {
             $this->addSheet('Sheet1');
         }
-        $fp = $this->sheets[$this->activeSheet]['stream'];
+        $fp = $this->sheets[$this->activeSheet]['streamd'];
         $content = '<row r="' . (++$this->sheets[$this->activeSheet]['count']) . '" ';
-        $content .= ' spans="1:' . count($data) . '">';
+        //$content .= ' spans="1:' . count($data) . '"';
+        $content .= '>';
+        if ($this->sheets[$this->activeSheet]['maxRow'] < $this->sheets[$this->activeSheet]['count']) {
+            $this->sheets[$this->activeSheet]['maxRow'] = $this->sheets[$this->activeSheet]['count'];
+        }
+        if ($filter) {
+            $this->sheets[$this->activeSheet]['filterRow'] = $this->sheets[$this->activeSheet]['count'];
+        }
+        if ($freeze) {
+            $this->sheets[$this->activeSheet]['freezeRow'] = $this->sheets[$this->activeSheet]['count'];
+        }
         foreach (array_values($data) as $k => $value) {
+            if ($header) {
+                $this->options['sharedStrings'] = true;
+            }
+            if (
+                $this->options['autoWidth'] &&
+                (
+                    !isset($this->sheets[$this->activeSheet]['widths'][$k]) ||
+                    mb_strlen($value, 'UTF-8') + ($filter ? 1 : 0) > $this->sheets[$this->activeSheet]['widths'][$k]
+                )
+            ) {
+                $this->sheets[$this->activeSheet]['widths'][$k] = mb_strlen($value, 'UTF-8') + ($filter ? 1 : 0);
+            }
             $type = null;
             $style = null;
             if ($value instanceof DateTime) {
@@ -105,7 +170,6 @@ class XLSXWriter implements DriverInterface
                     $type = 'n';
                     break;
                 default:
-                    $type = 'inlineStr';
                     $value = (string)$value;
                     if (
                         (
@@ -138,20 +202,28 @@ class XLSXWriter implements DriverInterface
                         $type = null;
                         $style = 2;
                         $value = $this->excelDate(0, 0, 0, (int)date('G', $v), (int)date('i', $v), (int)date('s', $v));
+                    } else {
+                        if ($this->options['sharedStrings']) {
+                            $type = 's';
+                            $temp = '';
+                            if ($header) {
+                                $temp = chr(0) . 'b';
+                            }
+                            $value = $this->getSharedStringValue($value . $temp);
+                        } else {
+                            $type = 'inlineStr';
+                        }
                     }
                     break;
             }
-            $cell = '';
-            $index = $k + 1;
-            while ($index !== 0) {
-                $temp = (($index - 1) % 26);
-                $index = (int) (($index - $temp) / 25);
-                $cell = chr(65 + $temp) . $cell;
+            if ($this->sheets[$this->activeSheet]['maxCell'] < $k) {
+                $this->sheets[$this->activeSheet]['maxCell'] = $k;
             }
+            $cell = $this->getCellFromIndex($k);
             $cell .= $this->sheets[$this->activeSheet]['count'];
             $content .= '<c r="' . $this->escape((string)$cell, true) . '"';
             if (isset($type)) {
-                $content .= ' t="' . $this->escape((string)$type, true) . '">';
+                $content .= ' t="' . $this->escape((string)$type, true) . '"';
             }
             if (isset($style)) {
                 $content .= ' s="' . $this->escape((string)$style, true) . '"';
@@ -202,7 +274,8 @@ class XLSXWriter implements DriverInterface
                 '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' .
                 '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>' .
                 '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>' .
-                '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>';
+                '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' .
+                '<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>';
         foreach ($this->sheets as $sheet) {
             $content .= '<Override PartName="/xl/worksheets/sheet' . $sheet['id'] . '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
         }
@@ -215,6 +288,7 @@ class XLSXWriter implements DriverInterface
             $content .= '<Relationship Id="rId' . $sheet['id'] . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' . $sheet['id'] . '.xml"/>';
         }
         $content .= '<Relationship Id="rId' . (count($this->sheets) + 2) . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>';
+        $content .= '<Relationship Id="rId' . (count($this->sheets) + 3) . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>';
         $content .= '</Relationships>';
         file_put_contents($this->temp . '/xl/_rels/workbook.xml.rels', $content);
 
@@ -236,6 +310,33 @@ class XLSXWriter implements DriverInterface
         </styleSheet>';
         file_put_contents($this->temp . '/xl/styles.xml', $content);
 
+        if ($this->options['sharedStrings']) {
+            $count = array_sum(
+                array_map(
+                    function (array $item) {
+                        return $item['count'];
+                    },
+                    $this->sharedStrings
+                )
+            );
+            $content = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\r\n" .
+            '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="' . $count . '" uniqueCount="' . count($this->sharedStrings) . '">';
+            foreach ($this->sharedStrings as $value => $item) {
+                $value = explode(chr(0), $value, 2);
+                $content .= '<si>';
+                    if (isset($value[1])) {
+                        $content .= '<r><rPr><b /></rPr>';
+                    }
+                    $content .='<t>' . $this->escape($value[0]) . '</t>';
+                    if (isset($value[1])) {
+                        $content .= '</r>';
+                    }
+                $content .= '</si>';
+            }
+            $content .= '</sst>';
+            file_put_contents($this->temp . '/xl/sharedStrings.xml', $content);
+        }
+
         $content = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\r\n" .
         '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' .
             '<sheets>';
@@ -247,7 +348,52 @@ class XLSXWriter implements DriverInterface
         // phpcs:enable
 
         foreach ($this->sheets as $sheet) {
-            $content = '</sheetData>' . '</worksheet>';
+            fwrite(
+                $sheet['stream'],
+                '<dimension ref="' .
+                $this->escape((string) $this->getCellFromIndex($sheet['minCell']) . '1') .
+                ':' .
+                $this->escape((string) $this->getCellFromIndex($sheet['maxCell']) . $sheet['maxRow']) .
+                '" />'
+            );
+            if ($sheet['freezeRow']) {
+                fwrite(
+                    $sheet['stream'],
+                    '<sheetViews><sheetView tabSelected="1" workbookViewId="0">' .
+                    '<pane ySplit="'.$sheet['freezeRow'].'" topLeftCell="A'.($sheet['freezeRow']+1).'" activePane="bottomLeft" state="frozen"/>' .
+                    '<selection pane="bottomLeft"/>' .
+                    '</sheetView></sheetViews>'
+                );
+            }
+            if ($this->options['autoWidth'] && count($sheet['widths'])) {
+                fwrite($sheet['stream'], '<cols>');
+                foreach ($sheet['widths'] as $kw => $w) {
+                    // 5 is the font-width
+                    $w = ((($w * 5 + 5) / 5 * 256) / 256);
+                    $w = max($w, $this->options['minWidth'], 1);
+                    fwrite($sheet['stream'], '<col min="'.($kw+1).'" max="'.($kw+1).'" width="'.sprintf('%01.3f', $w).'" bestFit="1" customWidth="1" />');
+                }
+                fwrite($sheet['stream'], '</cols>');
+            }
+            fwrite(
+                $sheet['streamd'],
+                '</sheetData>'
+            );
+            fclose($sheet['streamd']);
+            stream_copy_to_stream(
+                fopen($this->temp . '/xl/worksheets/sheet' . $sheet['id'] . '.xml.tmp', 'r'),
+                $sheet['stream']
+            );
+            unlink($this->temp . '/xl/worksheets/sheet' . $sheet['id'] . '.xml.tmp');
+            $content = '';
+            if ($sheet['filterRow']) {
+                $content .= '<autoFilter ref="' .
+                    $this->escape((string) $this->getCellFromIndex($sheet['minCell']) . $sheet['filterRow']) .
+                    ':' .
+                    $this->escape((string) $this->getCellFromIndex($sheet['maxCell']) . $sheet['maxRow']) .
+                    '"></autoFilter>';
+            }
+            $content .= '</worksheet>';
             fwrite($sheet['stream'], $content);
             fclose($sheet['stream']);
         }
@@ -266,7 +412,7 @@ class XLSXWriter implements DriverInterface
                 $filePath = $file->getRealPath();
                 $relativePath = substr($filePath, strlen($temp) + 1);
                 $zip->addFile($filePath, str_replace('\\', '/', $relativePath));
-                $zip->setCompressionIndex($index, ZipArchive::CM_STORE);
+                $zip->setCompressionIndex($index, ZipArchive::CM_DEFLATE);
                 $index++;
             }
         }
