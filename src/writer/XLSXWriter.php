@@ -37,7 +37,8 @@ class XLSXWriter implements DriverInterface
                 'defaultSheet' => null,
                 'sharedStrings' => true,
                 'autoWidth' => true,
-                'minWidth' => 4
+                'minWidth' => 4,
+                'maxWidth' => null
             ],
             $options
         );
@@ -62,7 +63,7 @@ class XLSXWriter implements DriverInterface
             htmlspecialchars($input, ENT_XML1, 'UTF-8');
     }
 
-    public function addSheet(string $name): DriverInterface
+    public function addSheet(string $name, array $options = []): DriverInterface
     {
         $id = count($this->sheets) + 1;
         $fp = fopen($this->temp . '/xl/worksheets/sheet' . $id . '.xml', 'w');
@@ -82,7 +83,10 @@ class XLSXWriter implements DriverInterface
             'maxCell'       => 0,
             'freezeRow'     => null,
             'filterRow'     => null,
-            'widths'        => []
+            'widths'        => $options['widths'] ?? [],
+            'autoWidth'     => $options['autoWidth'] ?? $this->options['autoWidth'] ?? true,
+            'minWidth'      => $options['minWidth'] ?? $this->options['minWidth'] ?? 4,
+            'maxWidth'      => $options['maxWidth'] ?? $this->options['maxWidth'] ?? null
         ];
         fwrite(
             $fp,
@@ -365,12 +369,15 @@ class XLSXWriter implements DriverInterface
                     '</sheetView></sheetViews>'
                 );
             }
-            if ($this->options['autoWidth'] && count($sheet['widths'])) {
+            if (count($sheet['widths'])) {
                 fwrite($sheet['stream'], '<cols>');
                 foreach ($sheet['widths'] as $kw => $w) {
                     // 5 is the font-width
                     $w = ((($w * 5 + 5) / 5 * 256) / 256);
-                    $w = max($w, $this->options['minWidth'], 1);
+                    $w = max($w, $sheet['minWidth'], 1);
+                    if (isset($sheet['maxWidth'])) {
+                        $w = min($w, $sheet['maxWidth']);
+                    }
                     fwrite($sheet['stream'], '<col min="'.($kw+1).'" max="'.($kw+1).'" width="'.sprintf('%01.3f', $w).'" bestFit="1" customWidth="1" />');
                 }
                 fwrite($sheet['stream'], '</cols>');
