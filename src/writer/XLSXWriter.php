@@ -150,15 +150,19 @@ class XLSXWriter implements DriverInterface
         foreach (array_values($data) as $k => $value) {
             if ($header) {
                 $this->options['sharedStrings'] = true;
+                if (!is_array($value)) {
+                    $value = (string)$value;
+                }
             }
+            $v = is_array($value) ? (string)(array_values($value)[0]) : (string)$value;
             if (
                 $this->options['autoWidth'] &&
                 (
                     !isset($this->sheets[$this->activeSheet]['widths'][$k]) ||
-                    mb_strlen($value, 'UTF-8') + ($filter ? 1 : 0) > $this->sheets[$this->activeSheet]['widths'][$k]
+                    mb_strlen($v, 'UTF-8') + ($filter ? 1 : 0) > $this->sheets[$this->activeSheet]['widths'][$k]
                 )
             ) {
-                $this->sheets[$this->activeSheet]['widths'][$k] = mb_strlen($value, 'UTF-8') + ($filter ? 1 : 0);
+                $this->sheets[$this->activeSheet]['widths'][$k] = mb_strlen($v, 'UTF-8') + ($filter ? 1 : 0);
             }
             $type = null;
             $style = null;
@@ -174,6 +178,14 @@ class XLSXWriter implements DriverInterface
                     $type = 'n';
                     break;
                 default:
+                    $format = '';
+                    if (is_array($value) && count($value) === 2) {
+                        $format = array_values($value)[1];
+                        $value = array_values($value)[0];
+                    }
+                    if ($header) {
+                        $format .= 'b';
+                    }
                     $value = (string)$value;
                     if (
                         (
@@ -210,8 +222,8 @@ class XLSXWriter implements DriverInterface
                         if ($this->options['sharedStrings']) {
                             $type = 's';
                             $temp = '';
-                            if ($header) {
-                                $temp = chr(0) . 'b';
+                            if (strlen($format)) {
+                                $temp = chr(0) . $format;
                             }
                             $value = $this->getSharedStringValue($value . $temp);
                         } else {
@@ -328,11 +340,21 @@ class XLSXWriter implements DriverInterface
             foreach ($this->sharedStrings as $value => $item) {
                 $value = explode(chr(0), $value, 2);
                 $content .= '<si>';
-                    if (isset($value[1])) {
-                        $content .= '<r><rPr><b /></rPr>';
+                    if (isset($value[1]) && strlen($value[1])) {
+                        $content .= '<r><rPr>';
+                        if (strpos($value[1], 'b') !== false) {
+                            $content .= '<b />';
+                        }
+                        if (strpos($value[1], 'i') !== false) {
+                            $content .= '<i />';
+                        }
+                        if (strpos($value[1], 'u') !== false) {
+                            $content .= '<u />';
+                        }
+                        $content .= '</rPr>';
                     }
                     $content .='<t>' . $this->escape($value[0]) . '</t>';
-                    if (isset($value[1])) {
+                    if (isset($value[1]) && strlen($value[1])) {
                         $content .= '</r>';
                     }
                 $content .= '</si>';
