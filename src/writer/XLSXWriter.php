@@ -128,7 +128,9 @@ class XLSXWriter implements DriverInterface
         array $data,
         bool $header = false,
         bool $filter = false,
-        bool $freeze = false
+        bool $freeze = false,
+        bool $borders = true,
+        int $fill = 0
     ): DriverInterface
     {
         if (!$this->activeSheet) {
@@ -150,14 +152,16 @@ class XLSXWriter implements DriverInterface
         foreach (array_values($data) as $k => $value) {
             $format = '';
             $v = $value;
-            if (is_array($v) && count($v) === 2) {
+            if (is_array($v)) {
                 $v = (string)array_values($value)[0];
-                $format = array_values($value)[1];
+                $format = array_values($value)[1] ?? '';
+                $fill = array_values($value)[2] ?? 0;
             }
             if ($header) {
                 $this->options['sharedStrings'] = true;
                 $format .= 'b';
                 $v = (string)$v;
+                $fill = 1;
             }
             
             if (
@@ -238,6 +242,12 @@ class XLSXWriter implements DriverInterface
             if (isset($type)) {
                 $content .= ' t="' . $this->escape((string)$type, true) . '"';
             }
+            if ($borders) {
+                $style = (int)$style + 4;
+            }
+            if ($fill) {
+                $style = (int)$style + (int)$fill * 8;
+            }
             if (isset($style)) {
                 $content .= ' s="' . $this->escape((string)$style, true) . '"';
             }
@@ -308,14 +318,64 @@ class XLSXWriter implements DriverInterface
         $content = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
         <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
         <fonts count="1"><font><name val="Calibri"/><family val="2"/></font></fonts>
-        <fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
-        <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+        <fills count="4">
+            <fill><patternFill patternType="none"/></fill>
+            <fill><patternFill patternType="gray125"/></fill>
+            <fill><patternFill patternType="solid"><fgColor rgb="FFFF0000"/></patternFill></fill>
+            <fill><patternFill patternType="solid"><fgColor rgb="FF00FF00"/></patternFill></fill>
+        </fills>
+        <borders count="2">
+            <border><left/><right/><top/><bottom/><diagonal/></border>
+            <border>
+                <left style="thin">
+                    <color indexed="64"/>
+                </left>
+                <right style="thin">
+                    <color indexed="64"/>
+                </right>
+                <top style="thin">
+                    <color indexed="64"/>
+                </top>
+                <bottom style="thin">
+                    <color indexed="64"/>
+                </bottom>
+                <diagonal/>
+            </border>
+        </borders>
         <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" /></cellStyleXfs>
-        <cellXfs count="4">
+        <cellXfs count="32">
             <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" />
             <xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" />
             <xf numFmtId="20" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" />
             <xf numFmtId="22" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" />
+            <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" />
+            <xf numFmtId="14" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
+            <xf numFmtId="20" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
+            <xf numFmtId="22" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
+            <xf numFmtId="0" fontId="0" fillId="1" applyFill="1" borderId="0" xfId="0" />
+            <xf numFmtId="14" fontId="0" fillId="1" applyFill="1" borderId="0" xfId="0" applyNumberFormat="1" />
+            <xf numFmtId="20" fontId="0" fillId="1" applyFill="1" borderId="0" xfId="0" applyNumberFormat="1" />
+            <xf numFmtId="22" fontId="0" fillId="1" applyFill="1" borderId="0" xfId="0" applyNumberFormat="1" />
+            <xf numFmtId="0" fontId="0" fillId="1" applyFill="1" borderId="1" xfId="0" applyBorder="1" />
+            <xf numFmtId="14" fontId="0" fillId="1" applyFill="1" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
+            <xf numFmtId="20" fontId="0" fillId="1" applyFill="1" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
+            <xf numFmtId="22" fontId="0" fillId="1" applyFill="1" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
+            <xf numFmtId="0" fontId="0" fillId="2" applyFill="1" borderId="0" xfId="0" />
+            <xf numFmtId="14" fontId="0" fillId="2" applyFill="1" borderId="0" xfId="0" applyNumberFormat="1" />
+            <xf numFmtId="20" fontId="0" fillId="2" applyFill="1" borderId="0" xfId="0" applyNumberFormat="1" />
+            <xf numFmtId="22" fontId="0" fillId="2" applyFill="1" borderId="0" xfId="0" applyNumberFormat="1" />
+            <xf numFmtId="0" fontId="0" fillId="2" applyFill="1" borderId="1" xfId="0" applyBorder="1" />
+            <xf numFmtId="14" fontId="0" fillId="2" applyFill="1" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
+            <xf numFmtId="20" fontId="0" fillId="2" applyFill="1" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
+            <xf numFmtId="22" fontId="0" fillId="2" applyFill="1" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
+            <xf numFmtId="0" fontId="0" fillId="3" applyFill="1" borderId="0" xfId="0" />
+            <xf numFmtId="14" fontId="0" fillId="3" applyFill="1" borderId="0" xfId="0" applyNumberFormat="1" />
+            <xf numFmtId="20" fontId="0" fillId="3" applyFill="1" borderId="0" xfId="0" applyNumberFormat="1" />
+            <xf numFmtId="22" fontId="0" fillId="3" applyFill="1" borderId="0" xfId="0" applyNumberFormat="1" />
+            <xf numFmtId="0" fontId="0" fillId="3" applyFill="1" borderId="1" xfId="0" applyBorder="1" />
+            <xf numFmtId="14" fontId="0" fillId="3" applyFill="1" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
+            <xf numFmtId="20" fontId="0" fillId="3" applyFill="1" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
+            <xf numFmtId="22" fontId="0" fillId="3" applyFill="1" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
         </cellXfs>
         <cellStyles count="1">
             <cellStyle name="Normal" xfId="0" builtinId="0"/>
