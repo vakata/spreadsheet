@@ -20,6 +20,7 @@ class XLSXWriter implements DriverInterface
     protected array $sheets = [];
     protected ?int $activeSheet = null;
     protected array $sharedStrings = [];
+    protected array $merges = [];
 
     /**
      * @param mixed $stream
@@ -130,7 +131,7 @@ class XLSXWriter implements DriverInterface
         bool $filter = false,
         bool $freeze = false,
         bool $borders = true,
-        int $fill = 0
+        int $rowfill = 0
     ): DriverInterface
     {
         if (!$this->activeSheet) {
@@ -149,13 +150,33 @@ class XLSXWriter implements DriverInterface
         if ($freeze) {
             $this->sheets[$this->activeSheet]['freezeRow'] = $this->sheets[$this->activeSheet]['count'];
         }
+        $span = 0;
+        $main = null;
+        $mains = null;
         foreach (array_values($data) as $k => $value) {
             $format = '';
+            $fill = $rowfill;
             $v = $value;
+            $cell = $this->getCellFromIndex($k);
+            $cell .= $this->sheets[$this->activeSheet]['count'];
             if (is_array($v)) {
                 $v = (string)array_values($value)[0];
                 $format = array_values($value)[1] ?? '';
                 $fill = array_values($value)[2] ?? 0;
+                $span = array_values($value)[3] ?? 0;
+                $main = $cell;
+                $mains = null;
+            }
+            if ($span && --$span >= 0 && $main !== $cell) {
+                $content .= '<c r="' . $this->escape((string)$cell, true) . '"';
+                if (isset($mains)) {
+                    $content .= ' s="' . $this->escape((string)$mains, true) . '"';
+                }
+                $content .= ' />';
+                if ($span === 0) {
+                    $this->merges[] = $main . ':' . $cell;
+                }
+                continue;
             }
             if ($header) {
                 $this->options['sharedStrings'] = true;
@@ -163,7 +184,6 @@ class XLSXWriter implements DriverInterface
                 $v = (string)$v;
                 $fill = 1;
             }
-            
             if (
                 $this->options['autoWidth'] &&
                 (
@@ -236,8 +256,6 @@ class XLSXWriter implements DriverInterface
             if ($this->sheets[$this->activeSheet]['maxCell'] < $k) {
                 $this->sheets[$this->activeSheet]['maxCell'] = $k;
             }
-            $cell = $this->getCellFromIndex($k);
-            $cell .= $this->sheets[$this->activeSheet]['count'];
             $content .= '<c r="' . $this->escape((string)$cell, true) . '"';
             if (isset($type)) {
                 $content .= ' t="' . $this->escape((string)$type, true) . '"';
@@ -247,6 +265,9 @@ class XLSXWriter implements DriverInterface
             }
             if ($fill) {
                 $style = (int)$style + (int)$fill * 8;
+            }
+            if ($span && $main === $cell) {
+                $mains = $style;
             }
             if (isset($style)) {
                 $content .= ' s="' . $this->escape((string)$style, true) . '"';
@@ -478,6 +499,13 @@ class XLSXWriter implements DriverInterface
                     ':' .
                     $this->escape((string) $this->getCellFromIndex($sheet['maxCell']) . $sheet['maxRow']) .
                     '"></autoFilter>';
+            }
+            if (count($this->merges)) {
+                $content .= '<mergeCells count="' . count($this->merges) . '">';
+                foreach ($this->merges as $merge) {
+                    $content .= '<mergeCell ref="' . $merge . '" />';
+                }
+                $content .= '</mergeCells>';
             }
             $content .= '</worksheet>';
             fwrite($sheet['stream'], $content);
