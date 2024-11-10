@@ -56,6 +56,10 @@ class XMLWriter implements DriverInterface
         $this->hasSheet = true;
         return $this;
     }
+    public function addHeaderRow(array $data): DriverInterface
+    {
+        return $this->addRow($data);
+    }
     public function addRow(array $data): DriverInterface
     {
         fwrite($this->stream, '<' . $this->options['row'] . '>');

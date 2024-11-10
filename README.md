@@ -28,6 +28,19 @@ foreach (\vakata\spreadsheet\Reader::fromFile('test.xlsx') as $k => $row) {
 }
 // or
 var_dump(\vakata\spreadsheet\Reader::fromFile('test.xlsx')->toArray());
+
+// when writing XLSX files formatting options are available
+$writer = \vakata\spreadsheet\Writer::toFile('test.xlsx', 'xlsx');
+$driver = $writer->getDriver();
+$driver->addSheet('Sheet name');
+$driver->addHeaderRow(['', ['', null, 'LTBRD'], ['Names', null, null, null, 'c', null, 3], '', '', ''], false, false);
+$driver->addHeaderRow(['', '№', 'Given', 'Surname','Family', 'Year']);
+$driver->addRow([['group 1', null, null, null, 'CM', '999999', 1, 3 ], 1, 'Leopold', 'Sarah', 'Johnson', 1981], 'b');
+$driver->addRow(['', 2, 'Phil', 'Stuart', 'Davidson', 1984], '', 'LTBR', '009900');
+$driver->addRow(['', 3, 'Anne', 'Marie', 'Gordon', [1992, 'biu', null, null, null, '00FF00']]);
+$driver->addRow([['group 2', null, null, null, 'CM', '999999', 1, 2 ], 4, 'George', '', 'Black', 1978]);
+$driver->addRow(['', 5, 'David', '', 'Green', 1989]);
+$driver->close();
 ```
 
 ## Contributing

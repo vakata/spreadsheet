@@ -49,6 +49,10 @@ class CSVWriter implements DriverInterface
     {
         throw new Exception('Operation not supported');
     }
+    public function addHeaderRow(array $data): DriverInterface
+    {
+        return $this->addRow($data);
+    }
     public function addRow(array $data): DriverInterface
     {
         fputcsv(

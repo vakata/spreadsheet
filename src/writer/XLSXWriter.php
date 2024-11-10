@@ -3,6 +3,7 @@
 namespace vakata\spreadsheet\writer;
 
 use DateTime;
+use RuntimeException;
 use ZipArchive;
 use vakata\spreadsheet\Exception;
 
@@ -20,7 +21,7 @@ class XLSXWriter implements DriverInterface
     protected array $sheets = [];
     protected ?int $activeSheet = null;
     protected array $sharedStrings = [];
-    protected array $merges = [];
+    protected array $styles = [];
 
     /**
      * @param mixed $stream
@@ -43,6 +44,10 @@ class XLSXWriter implements DriverInterface
             ],
             $options
         );
+        $this->styles[] = '/////';
+        $this->styles[] = 'd/////';
+        $this->styles[] = 't/////';
+        $this->styles[] = 'dt/////';
         do {
             $this->temp = $this->options['temp'] . DIRECTORY_SEPARATOR . 'xlsx_' . microtime(true) . '_' . uniqid();
         } while (is_dir($this->temp));
@@ -63,13 +68,43 @@ class XLSXWriter implements DriverInterface
             htmlspecialchars($input, ENT_XML1 | ENT_COMPAT, 'UTF-8') :
             htmlspecialchars($input, ENT_XML1, 'UTF-8');
     }
+    protected function getStyle(
+        string $type = '',
+        string $format = '',
+        string $borders = 'LTRB',
+        string $fill = '',
+        string $alignment = 'B',
+        string $color = ''
+    ): int {
+        $type = in_array(strtolower($type), ['d', 't', 'dt']) ? strtolower($type) : '';
+        $format = str_split(preg_replace('([^bui])', '', strtolower($format)) ?? '');
+        sort($format);
+        $format = implode('', $format);
+        $borders = str_split(strtoupper($borders));
+        sort($borders);
+        $borders = implode('', $borders);
+        if (strlen($fill) && strlen($fill) < 8) {
+            $fill = strtoupper(str_pad($fill, 8, 'F', STR_PAD_LEFT));
+        }
+        $alignment = str_split(preg_replace('([^LRCTBM])', '', str_replace('B', '', strtoupper($alignment))) ?? '');
+        sort($alignment);
+        $alignment = implode($alignment);
+        if (strlen($color) && strlen($color) < 8) {
+            $color = strtoupper(str_pad($color, 8, 'F', STR_PAD_LEFT));
+        }
+        $key = implode('/', [$type, $format, $borders, $fill, $alignment, $color]);
+        if (array_search($key, $this->styles) === false) {
+            $this->styles[] = $key;
+        }
+        return (int)array_search($key, $this->styles);
+    }
 
     public function addSheet(string $name, array $options = []): DriverInterface
     {
         $id = count($this->sheets) + 1;
         $fp = fopen($this->temp . '/xl/worksheets/sheet' . $id . '.xml', 'w');
         $tm = fopen($this->temp . '/xl/worksheets/sheet' . $id . '.xml.tmp', 'w');
-        if (!$fp) {
+        if (!$fp || !$tm) {
             throw new Exception('Could not open temp file');
         }
         $this->sheets[$id] = [
@@ -84,6 +119,8 @@ class XLSXWriter implements DriverInterface
             'maxCell'       => 0,
             'freezeRow'     => null,
             'filterRow'     => null,
+            'merges'        => [],
+            'merged'        => [],
             'widths'        => $options['widths'] ?? [],
             'autoWidth'     => $options['autoWidth'] ?? $this->options['autoWidth'] ?? true,
             'minWidth'      => $options['minWidth'] ?? $this->options['minWidth'] ?? 4,
@@ -101,7 +138,7 @@ class XLSXWriter implements DriverInterface
         $this->activeSheet = $id;
         return $this;
     }
-    protected function getSharedStringValue(string $key) : int
+    protected function getSharedStringValue(string $key): int
     {
         if (!isset($this->sharedStrings[$key])) {
             $this->sharedStrings[$key] = [
@@ -113,7 +150,7 @@ class XLSXWriter implements DriverInterface
 
         return $this->sharedStrings[$key]['index'];
     }
-    protected function getCellFromIndex(int $k) : string
+    protected function getCellFromIndex(int $k): string
     {
         $cell = '';
         $index = $k + 1;
@@ -125,15 +162,33 @@ class XLSXWriter implements DriverInterface
 
         return $cell;
     }
+    public function addHeaderRow(
+        array $data,
+        bool $filter = true,
+        bool $freeze = true,
+        string $format = 'b',
+        string $borders = 'LTBR',
+        string $fill = 'EBEBEB',
+        string $alignment = 'B',
+        string $color = ''
+    ): DriverInterface {
+        $row = $this->addRow($data, $format, $borders, $fill, $alignment, $color);
+        if ($filter) {
+            $this->sheets[$this->activeSheet]['filterRow'] = $this->sheets[$this->activeSheet]['count'];
+        }
+        if ($freeze) {
+            $this->sheets[$this->activeSheet]['freezeRow'] = $this->sheets[$this->activeSheet]['count'];
+        }
+        return $row;
+    }
     public function addRow(
         array $data,
-        bool $header = false,
-        bool $filter = false,
-        bool $freeze = false,
-        bool $borders = true,
-        int $rowfill = 0
-    ): DriverInterface
-    {
+        string $format = '',
+        string $borders = 'LTBR',
+        string $fill = '',
+        string $alignment = 'B',
+        string $color = ''
+    ): DriverInterface {
         if (!$this->activeSheet) {
             $this->addSheet('Sheet1');
         }
@@ -144,57 +199,59 @@ class XLSXWriter implements DriverInterface
         if ($this->sheets[$this->activeSheet]['maxRow'] < $this->sheets[$this->activeSheet]['count']) {
             $this->sheets[$this->activeSheet]['maxRow'] = $this->sheets[$this->activeSheet]['count'];
         }
-        if ($filter) {
-            $this->sheets[$this->activeSheet]['filterRow'] = $this->sheets[$this->activeSheet]['count'];
-        }
-        if ($freeze) {
-            $this->sheets[$this->activeSheet]['freezeRow'] = $this->sheets[$this->activeSheet]['count'];
-        }
-        $span = 0;
-        $main = null;
-        $mains = null;
         foreach (array_values($data) as $k => $value) {
-            $format = '';
-            $fill = $rowfill;
+            $ft = $format;
+            $bs = $borders;
+            $fl = $fill;
+            $al = $alignment;
+            $cl = $color;
             $v = $value;
-            $cell = $this->getCellFromIndex($k);
-            $cell .= $this->sheets[$this->activeSheet]['count'];
+            $cell = $this->getCellFromIndex($k) . $this->sheets[$this->activeSheet]['count'];
             if (is_array($v)) {
-                $v = (string)array_values($value)[0];
-                $format = array_values($value)[1] ?? '';
-                $fill = array_values($value)[2] ?? 0;
-                $span = array_values($value)[3] ?? 0;
-                $main = $cell;
-                $mains = null;
+                $v = array_values($value)[0];
+                $ft = array_values($value)[1] ?? $ft;
+                $bs = array_values($value)[2] ?? $bs;
+                $fl = array_values($value)[3] ?? $fl;
+                $al = array_values($value)[4] ?? $al;
+                $cl = array_values($value)[5] ?? $cl;
+                $spanC = array_values($value)[6] ?? 1;
+                $spanR = array_values($value)[7] ?? 1;
+                $style = $this->getStyle('', $ft, $bs, $fl, $al, $cl);
+                if ($spanC > 1 || $spanR > 1) {
+                    $this->sheets[$this->activeSheet]['merges'][] = $cell . ':' .
+                        $this->getCellFromIndex($k + $spanC - 1) .
+                        ($this->sheets[$this->activeSheet]['count'] + $spanR - 1);
+                    for ($mr = 0; $mr < $spanR; $mr++) {
+                        for ($mc = 0; $mc < $spanC; $mc++) {
+                            $key  = $this->getCellFromIndex($k + $mc);
+                            $key .= ($this->sheets[$this->activeSheet]['count'] + $mr);
+                            $this->sheets[$this->activeSheet]['merged'][$key] = $style;
+                        }
+                    }
+                    unset($this->sheets[$this->activeSheet]['merged'][$cell]);
+                }
             }
-            if ($span && --$span >= 0 && $main !== $cell) {
+            if (isset($this->sheets[$this->activeSheet]['merged'][$cell])) {
                 $content .= '<c r="' . $this->escape((string)$cell, true) . '"';
-                if (isset($mains)) {
-                    $content .= ' s="' . $this->escape((string)$mains, true) . '"';
+                if ($this->sheets[$this->activeSheet]['merged'][$cell]) {
+                    $content .= ' s="' .
+                        $this->escape((string)$this->sheets[$this->activeSheet]['merged'][$cell], true) .
+                        '"';
                 }
                 $content .= ' />';
-                if ($span === 0) {
-                    $this->merges[] = $main . ':' . $cell;
-                }
                 continue;
-            }
-            if ($header) {
-                $this->options['sharedStrings'] = true;
-                $format .= 'b';
-                $v = (string)$v;
-                $fill = 1;
             }
             if (
                 $this->options['autoWidth'] &&
                 (
                     !isset($this->sheets[$this->activeSheet]['widths'][$k]) ||
-                    mb_strlen($v, 'UTF-8') + ($filter ? 1 : 0) > $this->sheets[$this->activeSheet]['widths'][$k]
+                    mb_strlen($v, 'UTF-8') + 4 > $this->sheets[$this->activeSheet]['widths'][$k]
                 )
             ) {
-                $this->sheets[$this->activeSheet]['widths'][$k] = mb_strlen($v, 'UTF-8') + ($filter ? 1 : 0);
+                $this->sheets[$this->activeSheet]['widths'][$k] = mb_strlen($v, 'UTF-8') + 4;
             }
             $type = null;
-            $style = null;
+            $style = '';
             if ($v instanceof DateTime) {
                 $v = $v->format('c');
             }
@@ -215,7 +272,7 @@ class XLSXWriter implements DriverInterface
                         ) && $tmp = strtotime($v)
                     ) {
                         $type = null;
-                        $style = 1;
+                        $style = 'd';
                         $v = $this->excelDate((int)date('Y', $tmp), (int)date('n', $tmp), (int)date('j', $tmp));
                     } elseif (
                         // phpcs:ignore
@@ -223,7 +280,7 @@ class XLSXWriter implements DriverInterface
                         $tmp = strtotime($v)
                     ) {
                         $type = null;
-                        $style = 3;
+                        $style = 'dt';
                         $v = $this->excelDate(
                             (int)date('Y', $tmp),
                             (int)date('n', $tmp),
@@ -237,15 +294,22 @@ class XLSXWriter implements DriverInterface
                         $tmp = strtotime($v)
                     ) {
                         $type = null;
-                        $style = 2;
-                        $v = $this->excelDate(0, 0, 0, (int)date('G', $tmp), (int)date('i', $tmp), (int)date('s', $tmp));
+                        $style = 't';
+                        $v = $this->excelDate(
+                            0,
+                            0,
+                            0,
+                            (int)date('G', $tmp),
+                            (int)date('i', $tmp),
+                            (int)date('s', $tmp)
+                        );
                     } else {
                         if ($this->options['sharedStrings']) {
                             $type = 's';
                             $temp = '';
-                            if (strlen($format)) {
-                                $temp = chr(0) . $format;
-                            }
+                            // if (strlen($ft)) {
+                            //     $temp = chr(0) . $ft;
+                            // }
                             $v = $this->getSharedStringValue($v . $temp);
                         } else {
                             $type = 'inlineStr';
@@ -260,16 +324,8 @@ class XLSXWriter implements DriverInterface
             if (isset($type)) {
                 $content .= ' t="' . $this->escape((string)$type, true) . '"';
             }
-            if ($borders) {
-                $style = (int)$style + 4;
-            }
-            if ($fill) {
-                $style = (int)$style + (int)$fill * 8;
-            }
-            if ($span && $main === $cell) {
-                $mains = $style;
-            }
-            if (isset($style)) {
+            $style = $this->getStyle($style, $ft, $bs, $fl, $al, $cl);
+            if ($style) {
                 $content .= ' s="' . $this->escape((string)$style, true) . '"';
             }
             $content .= '>';
@@ -336,71 +392,95 @@ class XLSXWriter implements DriverInterface
         $content .= '</Relationships>';
         file_put_contents($this->temp . '/xl/_rels/workbook.xml.rels', $content);
 
+        $fonts = [
+            '/' => '<font><name val="Calibri"/><family val="2"/></font>'
+        ];
+        $colors = [];
+        $fills = [
+            '' => '<fill><patternFill patternType="none"/></fill>',
+            'gray' => '<fill><patternFill patternType="gray125"/></fill>'
+        ];
+        $borders = [
+            '' => '<border><left/><right/><top/><bottom/><diagonal/></border>'
+        ];
+        $styles = [];
+        foreach ($this->styles as $k => $style) {
+            $parts = explode('/', $style);
+            $nm = ([''=>0,'d'=>14,'t'=>20,'dt'=>22])[$parts[0]];
+            $ft = $parts[1];
+            $bs = $parts[2];
+            if (!isset($borders[$bs])) {
+                $borders[$bs] = '' .
+                    '<border>' .
+                    (strpos($bs, 'L') !== false ? '<left style="thin"><color indexed="64"/></left>' : '<left/>') .
+                    (strpos($bs, 'R') !== false ? '<right style="thin"><color indexed="64"/></right>' : '<right/>') .
+                    (strpos($bs, 'T') !== false ? '<top style="thin"><color indexed="64"/></top>' : '<top/>') .
+                    (strpos($bs, 'B') !== false ? '<bottom style="thin"><color indexed="64"/></bottom>' : '<bottom/>') .
+                    (strpos($bs, 'D') !== false ?
+                        '<diagonal style="thin"><color indexed="64"/></diagonal>' : '<diagonal/>'
+                    ) .
+                    '</border>';
+            }
+            $bs = array_search($bs, array_keys($borders));
+            $fl = $parts[3];
+            if (!isset($fills[$fl])) {
+                $fills[$fl] = '' .
+                    '<fill><patternFill patternType="solid"><fgColor rgb="'.$fl.'"/></patternFill></fill>';
+            }
+            $fl = array_search($fl, array_keys($fills));
+            $cl = $ft . '/' . $parts[5];
+            if (!isset($fonts[$cl])) {
+                $fonts[$cl] = '' .
+                    '<font>' .
+                    (strpos($ft, 'b') !== false ? '<b/>' : '') .
+                    (strpos($ft, 'u') !== false ? '<u/>' : '') .
+                    (strpos($ft, 'i') !== false ? '<i/>' : '') .
+                    '<name val="Calibri"/><family val="2"/>' .
+                    ($parts[5] ? '<color rgb="'.$parts[5].'"/>' : '' ) .
+                    '</font>';
+            }
+            if (strlen($parts[5])) {
+                $colors[] = '<color rgb="'.$parts[5].'"/>';
+            }
+            $cl = array_search($cl, array_keys($fonts));
+            $styles[$k] = '<xf xfId="0" fontId="'.$cl.'" ' .
+                ($cl ? ' applyFont="1" ' : '') .
+                ($nm ? ' numFmtId="'.$nm.'" applyNumberFormat="1" ' : '') .
+                ($bs ? ' borderId="'.$bs.'" applyBorder="1" ' : '') .
+                ($fl ? ' fillId="'.$fl.'" applyFill="1" ' : '');
+            if ($parts[4]) {
+                $styles[$k] .= ' applyAlignment="1">';
+                $styles[$k] .= '<alignment ';
+                if (strpos($parts[4], 'L') !== false) {
+                    $styles[$k] .= ' horizontal="left" ';
+                } elseif (strpos($parts[4], 'R') !== false) {
+                    $styles[$k] .= ' horizontal="right" ';
+                } elseif (strpos($parts[4], 'C') !== false) {
+                    $styles[$k] .= ' horizontal="center" ';
+                }
+                if (strpos($parts[4], 'T') !== false) {
+                    $styles[$k] .= ' vertical="top" ';
+                } elseif (strpos($parts[4], 'B') !== false) {
+                    $styles[$k] .= ' vertical="bottom" ';
+                } elseif (strpos($parts[4], 'M') !== false) {
+                    $styles[$k] .= ' vertical="center" ';
+                }
+                $styles[$k] .= ' /></xf>';
+            } else {
+                $styles[$k] .= '/>';
+            }
+        }
         $content = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
         <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-        <fonts count="1"><font><name val="Calibri"/><family val="2"/></font></fonts>
-        <fills count="4">
-            <fill><patternFill patternType="none"/></fill>
-            <fill><patternFill patternType="gray125"/></fill>
-            <fill><patternFill patternType="solid"><fgColor rgb="FFFF0000"/></patternFill></fill>
-            <fill><patternFill patternType="solid"><fgColor rgb="FF00FF00"/></patternFill></fill>
-        </fills>
-        <borders count="2">
-            <border><left/><right/><top/><bottom/><diagonal/></border>
-            <border>
-                <left style="thin">
-                    <color indexed="64"/>
-                </left>
-                <right style="thin">
-                    <color indexed="64"/>
-                </right>
-                <top style="thin">
-                    <color indexed="64"/>
-                </top>
-                <bottom style="thin">
-                    <color indexed="64"/>
-                </bottom>
-                <diagonal/>
-            </border>
-        </borders>
+        <fonts count="'.count($fonts).'">'.implode('', $fonts).'</fonts>
+        <fills count="'.count($fills).'">'.implode('', $fills).'</fills>
+        <borders count="'.count($borders).'">'.implode('', $borders).'</borders>
         <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" /></cellStyleXfs>
-        <cellXfs count="32">
-            <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" />
-            <xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" />
-            <xf numFmtId="20" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" />
-            <xf numFmtId="22" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" />
-            <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" />
-            <xf numFmtId="14" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
-            <xf numFmtId="20" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
-            <xf numFmtId="22" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
-            <xf numFmtId="0" fontId="0" fillId="1" applyFill="1" borderId="0" xfId="0" />
-            <xf numFmtId="14" fontId="0" fillId="1" applyFill="1" borderId="0" xfId="0" applyNumberFormat="1" />
-            <xf numFmtId="20" fontId="0" fillId="1" applyFill="1" borderId="0" xfId="0" applyNumberFormat="1" />
-            <xf numFmtId="22" fontId="0" fillId="1" applyFill="1" borderId="0" xfId="0" applyNumberFormat="1" />
-            <xf numFmtId="0" fontId="0" fillId="1" applyFill="1" borderId="1" xfId="0" applyBorder="1" />
-            <xf numFmtId="14" fontId="0" fillId="1" applyFill="1" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
-            <xf numFmtId="20" fontId="0" fillId="1" applyFill="1" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
-            <xf numFmtId="22" fontId="0" fillId="1" applyFill="1" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
-            <xf numFmtId="0" fontId="0" fillId="2" applyFill="1" borderId="0" xfId="0" />
-            <xf numFmtId="14" fontId="0" fillId="2" applyFill="1" borderId="0" xfId="0" applyNumberFormat="1" />
-            <xf numFmtId="20" fontId="0" fillId="2" applyFill="1" borderId="0" xfId="0" applyNumberFormat="1" />
-            <xf numFmtId="22" fontId="0" fillId="2" applyFill="1" borderId="0" xfId="0" applyNumberFormat="1" />
-            <xf numFmtId="0" fontId="0" fillId="2" applyFill="1" borderId="1" xfId="0" applyBorder="1" />
-            <xf numFmtId="14" fontId="0" fillId="2" applyFill="1" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
-            <xf numFmtId="20" fontId="0" fillId="2" applyFill="1" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
-            <xf numFmtId="22" fontId="0" fillId="2" applyFill="1" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
-            <xf numFmtId="0" fontId="0" fillId="3" applyFill="1" borderId="0" xfId="0" />
-            <xf numFmtId="14" fontId="0" fillId="3" applyFill="1" borderId="0" xfId="0" applyNumberFormat="1" />
-            <xf numFmtId="20" fontId="0" fillId="3" applyFill="1" borderId="0" xfId="0" applyNumberFormat="1" />
-            <xf numFmtId="22" fontId="0" fillId="3" applyFill="1" borderId="0" xfId="0" applyNumberFormat="1" />
-            <xf numFmtId="0" fontId="0" fillId="3" applyFill="1" borderId="1" xfId="0" applyBorder="1" />
-            <xf numFmtId="14" fontId="0" fillId="3" applyFill="1" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
-            <xf numFmtId="20" fontId="0" fillId="3" applyFill="1" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
-            <xf numFmtId="22" fontId="0" fillId="3" applyFill="1" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1" />
-        </cellXfs>
+        <cellXfs count="'.count($styles).'">'.implode('', $styles).'</cellXfs>
         <cellStyles count="1">
             <cellStyle name="Normal" xfId="0" builtinId="0"/>
         </cellStyles>
+        <colors><mruColors>'.implode('', $colors).'</mruColors></colors>
         </styleSheet>';
         file_put_contents($this->temp . '/xl/styles.xml', $content);
 
@@ -464,7 +544,8 @@ class XLSXWriter implements DriverInterface
                 fwrite(
                     $sheet['stream'],
                     '<sheetViews><sheetView tabSelected="1" workbookViewId="0">' .
-                    '<pane ySplit="'.$sheet['freezeRow'].'" topLeftCell="A'.($sheet['freezeRow']+1).'" activePane="bottomLeft" state="frozen"/>' .
+                    '<pane ySplit="' . $sheet['freezeRow'] . '" topLeftCell="A' . ($sheet['freezeRow'] + 1) . '" ' .
+                    ' activePane="bottomLeft" state="frozen"/>' .
                     '<selection pane="bottomLeft"/>' .
                     '</sheetView></sheetViews>'
                 );
@@ -478,7 +559,11 @@ class XLSXWriter implements DriverInterface
                     if (isset($sheet['maxWidth'])) {
                         $w = min($w, $sheet['maxWidth']);
                     }
-                    fwrite($sheet['stream'], '<col min="'.($kw+1).'" max="'.($kw+1).'" width="'.sprintf('%01.3f', $w).'" bestFit="1" customWidth="1" />');
+                    fwrite(
+                        $sheet['stream'],
+                        '<col min="' . ($kw + 1) . '" max="' . ($kw + 1) . '" width="' . sprintf('%01.3f', $w) . '" ' .
+                            ' bestFit="1" customWidth="1" />'
+                    );
                 }
                 fwrite($sheet['stream'], '</cols>');
             }
@@ -488,7 +573,10 @@ class XLSXWriter implements DriverInterface
             );
             fclose($sheet['streamd']);
             stream_copy_to_stream(
-                fopen($this->temp . '/xl/worksheets/sheet' . $sheet['id'] . '.xml.tmp', 'r'),
+                fopen(
+                    $this->temp . '/xl/worksheets/sheet' . $sheet['id'] . '.xml.tmp',
+                    'r'
+                ) ?: throw new RuntimeException(),
                 $sheet['stream']
             );
             unlink($this->temp . '/xl/worksheets/sheet' . $sheet['id'] . '.xml.tmp');
@@ -500,9 +588,9 @@ class XLSXWriter implements DriverInterface
                     $this->escape((string) $this->getCellFromIndex($sheet['maxCell']) . $sheet['maxRow']) .
                     '"></autoFilter>';
             }
-            if (count($this->merges)) {
-                $content .= '<mergeCells count="' . count($this->merges) . '">';
-                foreach ($this->merges as $merge) {
+            if (count($sheet['merges'])) {
+                $content .= '<mergeCells count="' . count($sheet['merges']) . '">';
+                foreach ($sheet['merges'] as $merge) {
                     $content .= '<mergeCell ref="' . $merge . '" />';
                 }
                 $content .= '</mergeCells>';
