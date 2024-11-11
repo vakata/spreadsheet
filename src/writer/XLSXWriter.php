@@ -40,7 +40,10 @@ class XLSXWriter implements DriverInterface
                 'sharedStrings' => true,
                 'autoWidth' => true,
                 'minWidth' => 4,
-                'maxWidth' => null
+                'maxWidth' => null,
+                'font' => 'Arial',
+                'size' => '12',
+                'family' => '2'
             ],
             $options
         );
@@ -393,7 +396,7 @@ class XLSXWriter implements DriverInterface
         file_put_contents($this->temp . '/xl/_rels/workbook.xml.rels', $content);
 
         $fonts = [
-            '/' => '<font><name val="Calibri"/><family val="2"/></font>'
+            '/' => '<font><sz val="' . $this->options['size'] . '"/><name val="' . $this->options['font'] . '"/><family val="' . $this->options['family'] . '"/></font>'
         ];
         $colors = [];
         $fills = [
@@ -435,7 +438,8 @@ class XLSXWriter implements DriverInterface
                     (strpos($ft, 'b') !== false ? '<b/>' : '') .
                     (strpos($ft, 'u') !== false ? '<u/>' : '') .
                     (strpos($ft, 'i') !== false ? '<i/>' : '') .
-                    '<name val="Calibri"/><family val="2"/>' .
+                    '<sz val="' . $this->options['size'] . '"/>' .
+                    '<name val="' . $this->options['font'] . '"/><family val="' . $this->options['family'] . '"/>' .
                     ($parts[5] ? '<color rgb="'.$parts[5].'"/>' : '' ) .
                     '</font>';
             }
