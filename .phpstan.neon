@@ -1,6 +1,4 @@
 parameters:
-	phpVersion: 80100
-	checkMissingIterableValueType: false
-	checkGenericClassInNonGenericObjectType: false
+	phpVersion: 80400
 	excludePaths:
 		- src/reader/XLSHelper.php

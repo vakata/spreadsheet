@@ -8,7 +8,7 @@ class CSVIterator implements \Iterator
 {
     protected mixed $stream;
     protected array $options = [];
-    protected mixed $row;
+    protected mixed $row = null;
     protected int $ind = -1;
 
     public function __construct(string $file, array $options = [])

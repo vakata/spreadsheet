@@ -9,7 +9,7 @@ class XLSXIterator implements \Iterator
     protected \ZipArchive $zip;
     protected array $strings = [];
     protected array $styles = [];
-    protected string $path;
+    protected ?string $path = null;
     protected mixed $stream;
     protected string $rest = '';
     protected string $def  = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet>';
@@ -86,7 +86,7 @@ class XLSXIterator implements \Iterator
                                 ) ?: throw new Exception('Could not read zip') // phpcs:ignore
                             ) ?: throw new Exception('Could not parse xml'); // phpcs:ignore
                             $i = 0;
-                            foreach ($styles?->cellXfs[0]?->xf ?? [] as $k => $v) {
+                            foreach ($styles->cellXfs[0]->xf ?? [] as $k => $v) {
                                 if (in_array((int)$v['numFmtId'], [14,20,22]) && (int)$v['applyNumberFormat']) {
                                     $this->styles[$i] = (int)$v['numFmtId'];
                                 }
