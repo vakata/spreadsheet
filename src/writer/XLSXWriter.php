@@ -484,7 +484,7 @@ class XLSXWriter implements DriverInterface
         <cellStyles count="1">
             <cellStyle name="Normal" xfId="0" builtinId="0"/>
         </cellStyles>
-        <colors><mruColors>'.implode('', $colors).'</mruColors></colors>
+        <colors>' . ( count($colors) ? '<mruColors>'.implode('', $colors).'</mruColors>' : '' ) . '</colors>
         </styleSheet>';
         file_put_contents($this->temp . '/xl/styles.xml', $content);
 
@@ -541,7 +541,7 @@ class XLSXWriter implements DriverInterface
                 '<dimension ref="' .
                 $this->escape((string) $this->getCellFromIndex($sheet['minCell']) . '1') .
                 ':' .
-                $this->escape((string) $this->getCellFromIndex($sheet['maxCell']) . $sheet['maxRow']) .
+                $this->escape((string) $this->getCellFromIndex($sheet['maxCell']) . max(1, $sheet['maxRow'])) .
                 '" />'
             );
             if ($sheet['freezeRow']) {
