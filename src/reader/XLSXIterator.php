@@ -197,8 +197,8 @@ class XLSXIterator implements \Iterator
                                 $value = (int)$value;
                             } elseif ($value == (float)$value) {
                                 $value = (float)$value;
-                            } elseif ($value == (double)$value) {
-                                $value = (double)$value;
+                            } elseif ($value == (float)$value) {
+                                $value = (float)$value;
                             }
                         }
                         break;
